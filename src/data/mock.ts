@@ -34,6 +34,8 @@ export const ecosystemRoles = [
 export const queueRows = [
   {
     id: 'RPT-28491',
+    title: 'Industrial runoff near public water intake',
+    summary: 'Photo series and lab strips submitted; awaiting third-party lab confirmation.',
     category: 'Environmental',
     sla: '4h',
     confidence: 78,
@@ -42,6 +44,8 @@ export const queueRows = [
   },
   {
     id: 'RPT-28488',
+    title: 'Unsafe heating / habitability — multi-unit building',
+    summary: 'Tenant documentation and inspection request; jurisdiction cross-check in progress.',
     category: 'Housing',
     sla: '12h',
     confidence: 62,
@@ -50,6 +54,8 @@ export const queueRows = [
   },
   {
     id: 'RPT-28480',
+    title: 'Workplace safety — missing guardrails on line',
+    summary: 'Union steward corroboration; legal review for whistleblower protections.',
     category: 'Labor',
     sla: '2h',
     confidence: 91,
@@ -58,6 +64,8 @@ export const queueRows = [
   },
   {
     id: 'RPT-28475',
+    title: 'Traffic stop — conflicting witness vs. bodycam metadata',
+    summary: 'Escalated for geo-tagged media alignment and regional truth-check.',
     category: 'Public safety',
     sla: '24h',
     confidence: 55,

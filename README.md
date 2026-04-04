@@ -10,17 +10,17 @@ This is **not** a social moderation or generic voting UI. It communicates struct
 - Deep blue / graphite / silver palette with muted gold accents
 - Sections: ecosystem roles, network map, report queues, escalations, reviewer performance, quality analytics, credentials, consensus tracker, conflict-of-interest alerts, regional coverage, category expertise, audit logs / chain proof samples, AI-assisted summary (advisory)
 
-Illustrative metrics and IDs are **mock data** for demonstration.
+With the API running, queues and analytics come from **`server/data/dashboard.json`** and optional **upstream** report feeds; bundled mock data is only a **fallback** if the API is unreachable.
 
 ## Run locally
 
 ```bash
 cd "C:\DPAL Reviewer Node"
 npm install
-npm run dev
+npm run dev:all
 ```
 
-Open the URL shown in the terminal (typically `http://localhost:5173`).
+Open the URL shown in the terminal (typically `http://localhost:5173`). Use `npm run dev` for UI-only with `VITE_USE_MOCK_DATA=true`, or if you point `VITE_API_BASE_URL` at an already-running reviewer API.
 
 ## Build for static hosting
 
@@ -79,4 +79,14 @@ git push -u origin main
 
 ## Relationship to DPAL
 
-This package is a **standalone** front-end concept for the DPAL ecosystem. Integrate with your API and auth layers when you promote it from concept to production.
+The dashboard loads **live JSON** from a small Node API in this repo (not a static shell). Run the UI and API together:
+
+```bash
+npm run dev:all
+```
+
+- **Browser:** Vite dev server proxies `/api` → `http://127.0.0.1:8787` (override with `VITE_DEV_API_PROXY_TARGET`).
+- **Endpoints:** `GET /api/reviewer/v1/dashboard`, `GET /api/reviewer/v1/reports`, `GET /api/reviewer/v1/health`.
+- **Data file:** `server/data/dashboard.json` — replace or sync from your pipeline for real queues; optional **`DPAL_UPSTREAM_URL`** merges reports from your main DPAL backend (see `.env.example`).
+
+For static hosting only (e.g. Vercel), deploy the Express API separately and set `VITE_API_BASE_URL` to that API’s `/api` origin.

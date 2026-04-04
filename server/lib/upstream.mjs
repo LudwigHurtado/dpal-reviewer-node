@@ -1,0 +1,84 @@
+/**
+ * Optional merge of reports from the main DPAL API. Set env:
+ *   DPAL_UPSTREAM_URL=https://your-main-api.example
+ *   DPAL_UPSTREAM_REPORTS_PATH=/api/v1/reports   (default)
+ *   DPAL_UPSTREAM_AUTH_HEADER=Bearer ...         (optional)
+ *
+ * Expected JSON shapes supported:
+ *   { "reports": [...] } | { "data": [...] } | [ ... ]
+ * Each item: { id, title?, summary?, category?, sla?, confidence?, assignee?, stage?, submittedAt? }
+ *   or aliases: report_id, subject, description, type, status
+ */
+
+function pickStr(obj, keys, fallback = '') {
+  for (const k of keys) {
+    if (obj[k] != null && String(obj[k]).trim() !== '') return String(obj[k]);
+  }
+  return fallback;
+}
+
+function pickNum(obj, keys, fallback = 0) {
+  for (const k of keys) {
+    const v = obj[k];
+    if (typeof v === 'number' && !Number.isNaN(v)) return v;
+    if (typeof v === 'string' && v.trim() !== '') {
+      const n = Number(v);
+      if (!Number.isNaN(n)) return n;
+    }
+  }
+  return fallback;
+}
+
+export function mapUpstreamReport(r) {
+  const id = pickStr(r, ['id', 'report_id', 'uuid', 'public_id'], '');
+  const title = pickStr(r, ['title', 'subject', 'name', 'headline'], 'Untitled report');
+  const summary = pickStr(r, ['summary', 'description', 'body', 'details'], '');
+  const category = pickStr(r, ['category', 'type', 'topic', 'sector'], 'General');
+  const stage = pickStr(r, ['stage', 'status', 'review_stage'], 'Triage');
+  const assignee = pickStr(r, ['assignee', 'assigned_to', 'reviewer'], 'Unassigned');
+  const sla = pickStr(r, ['sla', 'sla_window'], '—');
+  const confidence = Math.min(100, Math.max(0, pickNum(r, ['confidence', 'score', 'confidence_pct'], 50)));
+  const submittedAt = pickStr(r, ['submittedAt', 'submitted_at', 'created_at', 'createdAt'], '');
+
+  return {
+    id: id || `RPT-${Date.now()}`,
+    title,
+    summary,
+    category,
+    sla: sla || '—',
+    confidence,
+    assignee,
+    stage,
+    ...(submittedAt ? { submittedAt } : {}),
+  };
+}
+
+export async function fetchUpstreamReports() {
+  const base = process.env.DPAL_UPSTREAM_URL?.replace(/\/$/, '');
+  if (!base) return null;
+
+  const path = process.env.DPAL_UPSTREAM_REPORTS_PATH || '/api/v1/reports';
+  const url = `${base}${path.startsWith('/') ? path : `/${path}`}`;
+  const headers = { Accept: 'application/json' };
+  const auth = process.env.DPAL_UPSTREAM_AUTH_HEADER;
+  if (auth) headers.Authorization = auth;
+
+  const res = await fetch(url, { headers });
+  if (!res.ok) {
+    console.warn(`[reviewer-api] upstream ${res.status} ${res.statusText} for ${url}`);
+    return null;
+  }
+
+  const raw = await res.json();
+  let list = [];
+  if (Array.isArray(raw)) list = raw;
+  else if (Array.isArray(raw.reports)) list = raw.reports;
+  else if (Array.isArray(raw.data)) list = raw.data;
+  else if (Array.isArray(raw.items)) list = raw.items;
+  else {
+    console.warn('[reviewer-api] upstream JSON has no recognizable report array');
+    return null;
+  }
+
+  return list.map(mapUpstreamReport);
+}

@@ -1,19 +1,7 @@
 import { useState } from 'react';
 import { clsx } from 'clsx';
-import {
-  aiSummary,
-  auditEvents,
-  coiAlerts,
-  consensusItems,
-  credentials,
-  ecosystemRoles,
-  escalations,
-  expertise,
-  queueRows,
-  regions,
-  reviewers,
-} from './data/mock';
 import { ValidatorNetworkMap } from './components/ValidatorNetworkMap';
+import { useReviewerDashboard } from './hooks/useReviewerDashboard';
 
 const navItems = [
   { id: 'overview', label: 'Command overview' },
@@ -23,8 +11,34 @@ const navItems = [
   { id: 'audit', label: 'Audit & chain proofs' },
 ];
 
+function truncate(s: string, max: number) {
+  if (s.length <= max) return s;
+  return `${s.slice(0, max).trim()}…`;
+}
+
 export function App() {
   const [activeNav, setActiveNav] = useState('overview');
+  const { data, loading, error, hadApiFailure } = useReviewerDashboard();
+
+  if (!data) {
+    return (
+      <div className="app-shell">
+        <div className="main-area" style={{ padding: '2rem', color: 'var(--silver)' }}>
+          {loading ? 'Loading review dashboard…' : 'No dashboard data.'}
+        </div>
+      </div>
+    );
+  }
+
+  const qa = data.qualityAnalytics ?? {
+    meanEvidenceGrade: 'B+',
+    evidenceGradePct: 78,
+    panelAgreementPct: 91,
+    escalationPrecisionPct: 87,
+  };
+
+  const queueSource = data._sources?.queueRows === 'upstream' ? 'Main DPAL API' : 'Reviewer API (local file)';
+  const dataMode = import.meta.env.VITE_USE_MOCK_DATA === 'true' ? 'MOCK_STATIC' : 'API';
 
   return (
     <div className="app-shell">
@@ -57,7 +71,10 @@ export function App() {
           <div style={{ padding: '0 0.75rem', fontSize: '0.72rem', color: 'var(--silver-dim)' }}>
             <div className="mono">BUILD: review-node@1.0.0</div>
             <div className="mono" style={{ marginTop: '0.35rem' }}>
-              REGION: US-MULTI
+              DATA: {dataMode}
+            </div>
+            <div className="mono" style={{ marginTop: '0.35rem' }}>
+              QUEUE: {queueSource}
             </div>
           </div>
         </div>
@@ -70,6 +87,16 @@ export function App() {
             <div className="top-bar-meta">
               Session · UTC {new Date().toISOString().slice(0, 16).replace('T', ' ')} · Audit logging on
             </div>
+            {(loading || hadApiFailure) && (
+              <div className="top-bar-meta" style={{ marginTop: '0.5rem' }}>
+                {loading && <span>Syncing dashboard… </span>}
+                {hadApiFailure && error && (
+                  <span style={{ color: '#fca5a5' }}>
+                    API error ({truncate(error, 120)}). Showing cached demo data until the API is reachable.
+                  </span>
+                )}
+              </div>
+            )}
           </div>
           <div className="top-bar-actions">
             <button type="button" className="btn">
@@ -83,7 +110,7 @@ export function App() {
 
         <main className="content-scroll">
           <section id="sec-overview" className="ecosystem-strip" aria-label="Reviewer ecosystem">
-            {ecosystemRoles.map((role) => (
+            {data.ecosystemRoles.map((role) => (
               <article key={role.id} className="eco-card">
                 <h3>{role.title}</h3>
                 <p>{role.desc}</p>
@@ -102,7 +129,6 @@ export function App() {
           </p>
 
           <div className="grid-dashboard">
-            {/* Row: map + AI summary */}
             <div id="sec-validators" className="panel span-7">
               <div className="panel-header">
                 <h3>Validator network map</h3>
@@ -134,7 +160,7 @@ export function App() {
               </div>
               <div className="panel-body">
                 <p style={{ margin: 0, fontSize: '0.8125rem', lineHeight: 1.55, color: 'var(--silver)' }}>
-                  {aiSummary}
+                  {data.aiSummary}
                 </p>
                 <div style={{ marginTop: '1rem', paddingTop: '0.75rem', borderTop: '1px solid var(--graphite-border)' }}>
                   <div className="section-title">Model & policy</div>
@@ -146,16 +172,16 @@ export function App() {
               </div>
             </div>
 
-            {/* Queue + escalation */}
             <div id="sec-queues" className="panel span-6">
               <div className="panel-header">
                 <h3>Incoming report queues</h3>
-                <span className="badge">{queueRows.length} open</span>
+                <span className="badge">{data.queueRows.length} open</span>
               </div>
               <div className="panel-body" style={{ padding: 0 }}>
                 <table className="table-lite">
                   <thead>
                     <tr>
+                      <th>ID</th>
                       <th>Report</th>
                       <th>Category</th>
                       <th>SLA</th>
@@ -165,9 +191,19 @@ export function App() {
                     </tr>
                   </thead>
                   <tbody>
-                    {queueRows.map((row) => (
+                    {data.queueRows.map((row) => (
                       <tr key={row.id}>
                         <td className="mono">{row.id}</td>
+                        <td>
+                          <div style={{ fontWeight: 600, color: 'var(--white)', fontSize: '0.8rem' }}>
+                            {row.title ?? '—'}
+                          </div>
+                          {row.summary && (
+                            <div className="text-muted" style={{ fontSize: '0.72rem', marginTop: '0.25rem', maxWidth: '280px' }}>
+                              {truncate(row.summary, 140)}
+                            </div>
+                          )}
+                        </td>
                         <td>{row.category}</td>
                         <td>{row.sla}</td>
                         <td>{row.confidence}%</td>
@@ -188,7 +224,7 @@ export function App() {
                 <span className="badge">Recommendations</span>
               </div>
               <div className="panel-body">
-                {escalations.map((e) => (
+                {data.escalations.map((e) => (
                   <div
                     key={e.id}
                     style={{
@@ -224,14 +260,13 @@ export function App() {
               </div>
             </div>
 
-            {/* Reviewer performance + quality analytics */}
             <div className="panel span-6">
               <div className="panel-header">
                 <h3>Reviewer performance</h3>
                 <span className="badge">Trust scores</span>
               </div>
               <div className="panel-body">
-                {reviewers.map((r) => (
+                {data.reviewers.map((r) => (
                   <div key={r.name} className="stat-row">
                     <div>
                       <div style={{ fontWeight: 600, color: 'var(--white)', fontSize: '0.8rem' }}>{r.name}</div>
@@ -261,24 +296,24 @@ export function App() {
               <div className="panel-body">
                 <div className="stat-row">
                   <span className="stat-label">Mean evidence grade</span>
-                  <span className="stat-value">B+</span>
+                  <span className="stat-value">{qa.meanEvidenceGrade}</span>
                 </div>
                 <div className="progress-bar mb-1">
-                  <span style={{ width: '78%' }} />
+                  <span style={{ width: `${qa.evidenceGradePct}%` }} />
                 </div>
                 <div className="stat-row">
                   <span className="stat-label">Panel agreement rate</span>
-                  <span className="stat-value">91%</span>
+                  <span className="stat-value">{qa.panelAgreementPct}%</span>
                 </div>
                 <div className="progress-bar mb-1">
-                  <span style={{ width: '91%' }} />
+                  <span style={{ width: `${qa.panelAgreementPct}%` }} />
                 </div>
                 <div className="stat-row">
                   <span className="stat-label">Escalation precision</span>
-                  <span className="stat-value">87%</span>
+                  <span className="stat-value">{qa.escalationPrecisionPct}%</span>
                 </div>
                 <div className="progress-bar">
-                  <span style={{ width: '87%' }} />
+                  <span style={{ width: `${qa.escalationPrecisionPct}%` }} />
                 </div>
                 <p className="text-muted" style={{ marginTop: '0.75rem', marginBottom: 0 }}>
                   Low-quality reviewers are workload-capped; rewards accrue to high-accuracy validators per
@@ -287,14 +322,13 @@ export function App() {
               </div>
             </div>
 
-            {/* Credentials + consensus */}
             <div id="sec-trust" className="panel span-6">
               <div className="panel-header">
                 <h3>Credential status</h3>
                 <span className="badge">Wallet-linked</span>
               </div>
               <div className="panel-body">
-                {credentials.map((c) => (
+                {data.credentials.map((c) => (
                   <div
                     key={c.id}
                     style={{
@@ -348,7 +382,7 @@ export function App() {
                     </tr>
                   </thead>
                   <tbody>
-                    {consensusItems.map((c) => (
+                    {data.consensusItems.map((c) => (
                       <tr key={c.report}>
                         <td className="mono">{c.report}</td>
                         <td>{c.panel}</td>
@@ -363,18 +397,17 @@ export function App() {
               </div>
             </div>
 
-            {/* COI + Regional */}
             <div className="panel span-6">
               <div className="panel-header">
                 <h3>Conflict-of-interest alerts</h3>
                 <span className="badge">Compliance</span>
               </div>
               <div className="panel-body">
-                {coiAlerts.map((a, idx) => (
+                {data.coiAlerts.map((a, idx) => (
                   <div
                     key={a.id}
                     className="alert-banner"
-                    style={{ marginBottom: idx === coiAlerts.length - 1 ? 0 : '0.75rem' }}
+                    style={{ marginBottom: idx === data.coiAlerts.length - 1 ? 0 : '0.75rem' }}
                   >
                     <div>
                       <strong>{a.id}</strong> · {a.severity}
@@ -391,7 +424,7 @@ export function App() {
                 <span className="badge">Truth-check teams</span>
               </div>
               <div className="panel-body">
-                {regions.map((r) => (
+                {data.regions.map((r) => (
                   <div key={r.code} className="stat-row">
                     <div>
                       <span style={{ fontWeight: 600, color: 'var(--white)' }}>Region {r.code}</span>
@@ -405,14 +438,13 @@ export function App() {
               </div>
             </div>
 
-            {/* Category expertise + audit */}
             <div className="panel span-6">
               <div className="panel-header">
                 <h3>Category expertise indicators</h3>
                 <span className="badge">Sector panels</span>
               </div>
               <div className="panel-body">
-                {expertise.map((e) => (
+                {data.expertise.map((e) => (
                   <div key={e.sector} style={{ marginBottom: '0.75rem' }}>
                     <div className="flex-between">
                       <span className="stat-label">{e.sector}</span>
@@ -436,7 +468,7 @@ export function App() {
               <div className="panel-body">
                 <div className="section-title">Recent events</div>
                 <div className="timeline">
-                  {auditEvents.map((ev) => (
+                  {data.auditEvents.map((ev) => (
                     <div key={ev.ts + ev.ref} className="timeline-item">
                       <div className="mono" style={{ color: 'var(--silver-dim)' }}>
                         {ev.ts}
@@ -472,7 +504,6 @@ export function App() {
               </div>
             </div>
 
-            {/* Footer strip */}
             <div className="panel span-12">
               <div className="panel-header">
                 <h3>Operational posture</h3>
@@ -505,10 +536,12 @@ export function App() {
                     </p>
                   </div>
                   <div>
-                    <div className="section-title">Disclaimer</div>
+                    <div className="section-title">Data source</div>
                     <p style={{ margin: 0, lineHeight: 1.6, color: 'var(--silver-dim)' }}>
-                      This interface is a product concept for DPAL’s Validator / Review-Node System. Metrics
-                      and identifiers are illustrative.
+                      Queue rows load from the reviewer API when{' '}
+                      <span className="mono">VITE_USE_MOCK_DATA</span> is unset; set{' '}
+                      <span className="mono">DPAL_UPSTREAM_URL</span> on the API server to merge reports from your
+                      main DPAL backend. See <span className="mono">.env.example</span>.
                     </p>
                   </div>
                 </div>
