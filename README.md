@@ -31,9 +31,20 @@ npm run preview
 
 Output is in `dist/`.
 
+## Git identity (first commit)
+
+If Git reports “Please tell me who you are,” set your name and email for this repo (or use `--global`):
+
+```bash
+git config user.name "Your Name"
+git config user.email "you@example.com"
+```
+
+The initial import used a **local placeholder** identity only so the repository could be created; replace it with your own before pushing.
+
 ## Create a GitHub repository
 
-From this folder, after [GitHub CLI](https://cli.github.com/) login (`gh auth login`):
+Install [GitHub CLI](https://cli.github.com/) if you want one-command remote creation. From this folder, after `gh auth login`:
 
 ```bash
 git init
