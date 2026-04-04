@@ -31,6 +31,22 @@ npm run preview
 
 Output is in `dist/`.
 
+## Deploy on Vercel (GitHub)
+
+The repo is intended to live on GitHub and deploy as a static Vite app.
+
+**Repository:** [github.com/LudwigHurtado/dpal-reviewer-node](https://github.com/LudwigHurtado/dpal-reviewer-node)
+
+1. Sign in at [vercel.com](https://vercel.com) with your GitHub account.
+2. **Add New… → Project → Import** the repo **`LudwigHurtado/dpal-reviewer-node`**.
+3. Vercel should detect **Vite**. Leave defaults unless you changed the layout:
+   - **Build Command:** `npm run build`
+   - **Output Directory:** `dist`
+   - **Install Command:** `npm install`
+4. Click **Deploy**. Future pushes to `main` trigger new deployments.
+
+`vercel.json` in this repo pins build/output so settings stay consistent.
+
 ## Git identity (first commit)
 
 If Git reports “Please tell me who you are,” set your name and email for this repo (or use `--global`):
