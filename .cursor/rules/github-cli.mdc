@@ -1,0 +1,20 @@
+---
+description: Prefer GitHub CLI (gh) for GitHub hosting operations; git for local commits
+alwaysApply: true
+---
+
+# GitHub CLI first
+
+Use **`gh`** for anything that talks to **GitHub.com** when it is available:
+
+- Repos: `gh repo view`, `gh repo create`, `gh repo sync`, `gh browse`
+- PRs: `gh pr create`, `gh pr list`, `gh pr checkout`, `gh pr merge`
+- Issues / releases / workflows as needed: `gh issue`, `gh release`, `gh workflow`
+
+Use **`git`** for local history: `git add`, `git commit`, `git status`, `git diff`, `git push`, `git pull`.
+
+After `gh auth login`, **`gh auth setup-git`** should be configured so HTTPS Git operations reuse the same GitHub credentials without repeated browser prompts.
+
+**Cursor agent:** Global auto-run for `gh` and `git` is configured in the user **`permissions.json`** (`terminalAllowlist`). **Agent → Auto-run** must still be set to **Run Everything** (or sandbox auto-run) in Cursor Settings; in **Ask Every Time** mode, allowlists are not applied.
+
+Do not paste or commit tokens. Prefer `gh auth status` over echoing credentials.
