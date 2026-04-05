@@ -4,10 +4,42 @@ import type {
   VerifierQueueResponse,
 } from '../verifier/types';
 
+/**
+ * Base URL for this repo’s Express routes (`/api/reviewer/v1/verifier/...`).
+ * - Dev default: `/api` → Vite proxies to `VITE_DEV_API_PROXY_TARGET` (reviewer API on :8787).
+ * - If `VITE_API_BASE_URL` is an absolute URL without `/api`, append `/api` so paths are not
+ *   `https://host/reviewer/...` (404) instead of `https://host/api/reviewer/...`.
+ */
 function baseUrl(): string {
   const raw = import.meta.env.VITE_API_BASE_URL;
   if (raw === undefined || raw === '') return '/api';
-  return raw.replace(/\/$/, '');
+  let u = raw.trim().replace(/\/$/, '');
+  // `https://host` (no path) → `https://host/api` so we don't request `/reviewer/...` at domain root (404).
+  if (/^https?:\/\/[^/?#]+\/?$/i.test(u)) {
+    u = `${u.replace(/\/$/, '')}/api`;
+  }
+  return u;
+}
+
+function verifierReportsPath(): string {
+  return `${baseUrl()}/reviewer/v1/verifier/reports`;
+}
+
+async function parseJsonSafe(res: Response): Promise<Record<string, unknown>> {
+  try {
+    return (await res.json()) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+}
+
+function httpError(res: Response, url: string, data: Record<string, unknown>): Error {
+  const apiErr = typeof data.error === 'string' ? data.error : '';
+  const hint =
+    res.status === 404
+      ? ' This usually means the browser is not talking to the Reviewer Node API. Locally: unset VITE_API_BASE_URL, run `npm run dev:api` (or `npm run dev:all`). Production: set VITE_API_BASE_URL to your deployed Reviewer service URL ending in /api — not the main DPAL filing API unless it also hosts /api/reviewer/v1/verifier.'
+      : '';
+  return new Error(`${apiErr || res.statusText || res.status} (${res.status}) — ${url}${hint}`);
 }
 
 function headers(json = false): HeadersInit {
@@ -19,17 +51,19 @@ function headers(json = false): HeadersInit {
 }
 
 export async function fetchVerifierQueue(): Promise<VerifierQueueResponse> {
-  const res = await fetch(`${baseUrl()}/reviewer/v1/verifier/reports`, { headers: headers() });
-  const data = (await res.json()) as VerifierQueueResponse;
-  if (!res.ok) throw new Error((data as { error?: string }).error || res.statusText);
+  const url = verifierReportsPath();
+  const res = await fetch(url, { headers: headers() });
+  const data = (await parseJsonSafe(res)) as unknown as VerifierQueueResponse;
+  if (!res.ok) throw httpError(res, url, data as unknown as Record<string, unknown>);
   return data;
 }
 
 export async function fetchVerifierReportDetail(reportId: string): Promise<VerifierDetailResponse> {
   const id = encodeURIComponent(reportId);
-  const res = await fetch(`${baseUrl()}/reviewer/v1/verifier/reports/${id}`, { headers: headers() });
-  const data = (await res.json()) as VerifierDetailResponse;
-  if (!res.ok) throw new Error((data as { error?: string }).error || res.statusText);
+  const url = `${baseUrl()}/reviewer/v1/verifier/reports/${id}`;
+  const res = await fetch(url, { headers: headers() });
+  const data = (await parseJsonSafe(res)) as unknown as VerifierDetailResponse;
+  if (!res.ok) throw httpError(res, url, data as unknown as Record<string, unknown>);
   return data;
 }
 
