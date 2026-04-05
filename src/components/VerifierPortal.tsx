@@ -313,6 +313,47 @@ export function VerifierPortal() {
           </div>
         </header>
 
+        <section
+          aria-label="DPAL Validator Portal"
+          style={{
+            margin: '0 0 1rem',
+            borderRadius: '10px',
+            overflow: 'hidden',
+            border: '1px solid rgba(148, 163, 184, 0.25)',
+            position: 'relative',
+            maxHeight: 'min(44vh, 440px)',
+            background: '#0f172a',
+          }}
+        >
+          <img
+            src="/validator-portal-hero.png"
+            alt="DPAL Validator Portal — operations center for reviewing public reports"
+            width={1600}
+            height={600}
+            style={{
+              width: '100%',
+              height: 'auto',
+              maxHeight: 'min(44vh, 440px)',
+              objectFit: 'cover',
+              display: 'block',
+            }}
+          />
+          <div
+            style={{
+              position: 'absolute',
+              bottom: 0,
+              left: 0,
+              right: 0,
+              padding: '0.75rem 1.25rem',
+              background: 'linear-gradient(to top, rgba(15, 23, 42, 0.92), transparent)',
+            }}
+          >
+            <div className="mono" style={{ fontSize: '0.65rem', color: '#94a3b8', letterSpacing: '0.18em' }}>
+              DPAL VALIDATOR PORTAL
+            </div>
+          </div>
+        </section>
+
         {notice && (
           <div
             role="status"
