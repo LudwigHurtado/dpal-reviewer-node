@@ -4,6 +4,8 @@ Premium enterprise **product concept** for DPAL: a **Validator / Review-Node Com
 
 This is **not** a social moderation or generic voting UI. It communicates structured validation, auditable histories, wallet-linked credentials, chain-anchored proofs (conceptual), and operational intelligence for administrators, analysts, legal teams, and validators.
 
+**Docs for contributors & AI assistants:** [`CONTRIBUTING.md`](CONTRIBUTING.md) (setup and PRs) · [`AGENTS.md`](AGENTS.md) (agent instructions + progress log) · [`claude.md`](claude.md) (deep technical context, including related `dpal-front-end` notes).
+
 ## What’s in this repo
 
 - React + Vite + TypeScript single-page dashboard
@@ -90,3 +92,14 @@ npm run dev:all
 - **Data file:** `server/data/dashboard.json` — replace or sync from your pipeline for real queues; optional **`DPAL_UPSTREAM_URL`** merges reports from your main DPAL backend (see `.env.example`).
 
 For static hosting only (e.g. Vercel), deploy the Express API separately and set `VITE_API_BASE_URL` to that API’s `/api` origin.
+
+## Live reports + reviewer opinions (production)
+
+The static site (e.g. [dpal-reviewer-node on Vercel](https://dpal-reviewer-node.vercel.app/)) **does not run Node** — it only serves the built UI. To load **real reports** and save **opinions / recommended effects**:
+
+1. **Host the reviewer API** (`server/index.mjs`) on Railway, Render, Fly.io, a VPS, etc. Expose `GET /api/reviewer/v1/dashboard` and `POST /api/reviewer/v1/reports/:reportId/review`.
+2. **Point the UI at that API:** in Vercel → Project → Settings → Environment Variables, set **`VITE_API_BASE_URL`** to your API base, e.g. `https://your-api.example.com/api` (no trailing slash). Redeploy so Vite bakes it in.
+3. **Merge reports from main DPAL:** on the **API server**, set **`DPAL_UPSTREAM_URL`** to your main backend origin and **`DPAL_UPSTREAM_REPORTS_PATH`** to the path that returns a JSON array (or `{ reports | data | items }`). See `server/lib/upstream.mjs`.
+4. **Public “Open report” links:** set **`VITE_DPAL_PUBLIC_WEB_URL`** on Vercel to your DPAL web app origin (e.g. `https://your-dpal-front.vercel.app`), **or** set **`DPAL_PUBLIC_REPORT_BASE`** on the API server to the same (links are built as `?reportId=<id>`).
+
+Saved reviewer entries are stored in **`server/data/reviewer-reviews.json`** on the API host (no per-user auth yet — add later).

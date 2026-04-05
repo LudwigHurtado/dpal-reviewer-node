@@ -29,6 +29,16 @@ function pickNum(obj, keys, fallback = 0) {
   return fallback;
 }
 
+/** Build public DPAL web URL for a report id (uses `DPAL_PUBLIC_REPORT_BASE` on the API server). */
+export function buildPublicReportUrl(reportId) {
+  const id = String(reportId || '').trim();
+  if (!id) return undefined;
+  const base = process.env.DPAL_PUBLIC_REPORT_BASE?.replace(/\/$/, '');
+  if (!base) return undefined;
+  const hasQuery = base.includes('?');
+  return `${base}${hasQuery ? '&' : '?'}reportId=${encodeURIComponent(id)}`;
+}
+
 export function mapUpstreamReport(r) {
   const id = pickStr(r, ['id', 'report_id', 'uuid', 'public_id'], '');
   const title = pickStr(r, ['title', 'subject', 'name', 'headline'], 'Untitled report');
@@ -39,9 +49,14 @@ export function mapUpstreamReport(r) {
   const sla = pickStr(r, ['sla', 'sla_window'], '—');
   const confidence = Math.min(100, Math.max(0, pickNum(r, ['confidence', 'score', 'confidence_pct'], 50)));
   const submittedAt = pickStr(r, ['submittedAt', 'submitted_at', 'created_at', 'createdAt'], '');
+  const location = pickStr(r, ['location', 'region', 'city'], '');
+  const publicUrlRaw = pickStr(r, ['publicUrl', 'url', 'link', 'public_url', 'web_url'], '');
+
+  const resolvedId = id || `RPT-${Date.now()}`;
+  const publicUrl = publicUrlRaw || buildPublicReportUrl(resolvedId);
 
   return {
-    id: id || `RPT-${Date.now()}`,
+    id: resolvedId,
     title,
     summary,
     category,
@@ -50,6 +65,8 @@ export function mapUpstreamReport(r) {
     assignee,
     stage,
     ...(submittedAt ? { submittedAt } : {}),
+    ...(location ? { location } : {}),
+    ...(publicUrl ? { publicUrl } : {}),
   };
 }
 

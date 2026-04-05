@@ -42,6 +42,7 @@ export function useReviewerDashboard() {
   const [data, setData] = useState<ReviewerDashboard | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
   const useMock = import.meta.env.VITE_USE_MOCK_DATA === 'true';
 
   useEffect(() => {
@@ -74,7 +75,9 @@ export function useReviewerDashboard() {
     return () => {
       cancelled = true;
     };
-  }, [useMock]);
+  }, [useMock, refreshKey]);
 
-  return { data, loading, error, hadApiFailure: Boolean(error) && !useMock };
+  const refresh = () => setRefreshKey((k) => k + 1);
+
+  return { data, loading, error, hadApiFailure: Boolean(error) && !useMock, refresh };
 }

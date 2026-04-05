@@ -1,11 +1,14 @@
 import { useState } from 'react';
 import { clsx } from 'clsx';
 import { ValidatorNetworkMap } from './components/ValidatorNetworkMap';
+import { QueueReportReviewPanel } from './components/QueueReportReviewPanel';
 import { useReviewerDashboard } from './hooks/useReviewerDashboard';
+import { resolvePublicReportUrl } from './utils/reportLinks';
 
 const navItems = [
   { id: 'overview', label: 'Command overview' },
   { id: 'queues', label: 'Review queues' },
+  { id: 'report-review', label: 'Opinions & effects' },
   { id: 'validators', label: 'Validator network' },
   { id: 'trust', label: 'Trust & credentials' },
   { id: 'audit', label: 'Audit & chain proofs' },
@@ -18,7 +21,9 @@ function truncate(s: string, max: number) {
 
 export function App() {
   const [activeNav, setActiveNav] = useState('overview');
-  const { data, loading, error, hadApiFailure } = useReviewerDashboard();
+  const [stubNotice, setStubNotice] = useState<string | null>(null);
+  const { data, loading, error, hadApiFailure, refresh } = useReviewerDashboard();
+  const useMock = import.meta.env.VITE_USE_MOCK_DATA === 'true';
 
   if (!data) {
     return (
@@ -38,7 +43,7 @@ export function App() {
   };
 
   const queueSource = data._sources?.queueRows === 'upstream' ? 'Main DPAL API' : 'Reviewer API (local file)';
-  const dataMode = import.meta.env.VITE_USE_MOCK_DATA === 'true' ? 'MOCK_STATIC' : 'API';
+  const dataMode = useMock ? 'MOCK_STATIC' : 'API';
 
   return (
     <div className="app-shell">
@@ -76,6 +81,12 @@ export function App() {
             <div className="mono" style={{ marginTop: '0.35rem' }}>
               QUEUE: {queueSource}
             </div>
+            {!useMock && (
+              <div className="mono" style={{ marginTop: '0.35rem', lineHeight: 1.4 }}>
+                LINKS:{' '}
+                {import.meta.env.VITE_DPAL_PUBLIC_WEB_URL ? 'VITE_DPAL_PUBLIC_WEB_URL set' : 'set VITE_DPAL_PUBLIC_WEB_URL for Open report'}
+              </div>
+            )}
           </div>
         </div>
       </aside>
@@ -99,14 +110,54 @@ export function App() {
             )}
           </div>
           <div className="top-bar-actions">
-            <button type="button" className="btn">
+            <button
+              type="button"
+              className="btn"
+              onClick={() =>
+                setStubNotice(
+                  'Export audit bundle is not wired yet — connect an export pipeline or download API when ready.',
+                )
+              }
+            >
               Export audit bundle
             </button>
-            <button type="button" className="btn btn-primary">
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() =>
+                setStubNotice(
+                  'Assign validator is not wired yet — connect your assignment / roster service when ready.',
+                )
+              }
+            >
               Assign validator
             </button>
           </div>
         </header>
+
+        {stubNotice && (
+          <div
+            role="status"
+            className="stub-notice"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '1rem',
+              flexWrap: 'wrap',
+              padding: '0.6rem 1.25rem',
+              fontSize: '0.78rem',
+              color: 'var(--silver)',
+              background: 'rgba(59, 130, 246, 0.12)',
+              borderBottom: '1px solid rgba(59, 130, 246, 0.25)',
+            }}
+          >
+            <span>{stubNotice}</span>
+            <button type="button" className="btn" style={{ fontSize: '0.72rem', padding: '0.35rem 0.75rem' }} onClick={() => setStubNotice(null)}>
+              Dismiss
+            </button>
+          </div>
+        )}
 
         <main className="content-scroll">
           <section id="sec-overview" className="ecosystem-strip" aria-label="Reviewer ecosystem">
@@ -188,33 +239,68 @@ export function App() {
                       <th>Confidence</th>
                       <th>Assignment</th>
                       <th>Stage</th>
+                      <th>Open</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {data.queueRows.map((row) => (
-                      <tr key={row.id}>
-                        <td className="mono">{row.id}</td>
-                        <td>
-                          <div style={{ fontWeight: 600, color: 'var(--white)', fontSize: '0.8rem' }}>
-                            {row.title ?? '—'}
-                          </div>
-                          {row.summary && (
-                            <div className="text-muted" style={{ fontSize: '0.72rem', marginTop: '0.25rem', maxWidth: '280px' }}>
-                              {truncate(row.summary, 140)}
+                    {data.queueRows.map((row) => {
+                      const href = resolvePublicReportUrl(row);
+                      return (
+                        <tr key={row.id}>
+                          <td className="mono">{row.id}</td>
+                          <td>
+                            <div style={{ fontWeight: 600, color: 'var(--white)', fontSize: '0.8rem' }}>
+                              {row.title ?? '—'}
                             </div>
-                          )}
-                        </td>
-                        <td>{row.category}</td>
-                        <td>{row.sla}</td>
-                        <td>{row.confidence}%</td>
-                        <td>{row.assignee}</td>
-                        <td>
-                          <span className="tag tag-sector">{row.stage}</span>
-                        </td>
-                      </tr>
-                    ))}
+                            {row.summary && (
+                              <div className="text-muted" style={{ fontSize: '0.72rem', marginTop: '0.25rem', maxWidth: '280px' }}>
+                                {truncate(row.summary, 140)}
+                              </div>
+                            )}
+                          </td>
+                          <td>{row.category}</td>
+                          <td>{row.sla}</td>
+                          <td>{row.confidence}%</td>
+                          <td>{row.assignee}</td>
+                          <td>
+                            <span className="tag tag-sector">{row.stage}</span>
+                          </td>
+                          <td>
+                            {href ? (
+                              <a href={href} target="_blank" rel="noopener noreferrer" className="mono" style={{ fontSize: '0.7rem', color: 'var(--gold)' }}>
+                                Open ↗
+                              </a>
+                            ) : (
+                              <span className="text-muted" style={{ fontSize: '0.68rem' }}>
+                                —
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
+              </div>
+            </div>
+
+            <div id="sec-report-review" className="panel span-12">
+              <div className="panel-header">
+                <h3>Reviewer opinions & recommended effects</h3>
+                <span className="badge">Per report</span>
+              </div>
+              <div className="panel-body">
+                <p className="text-muted" style={{ marginTop: 0, marginBottom: '1rem', fontSize: '0.8rem', lineHeight: 1.55 }}>
+                  Queue rows load from your reviewer API. When <span className="mono">DPAL_UPSTREAM_URL</span> is set on
+                  that API, live reports from your main DPAL backend replace the demo queue. Save opinion and effect
+                  here (stored on the API server in <span className="mono">reviewer-reviews.json</span> until auth and
+                  attribution are added).
+                </p>
+                <QueueReportReviewPanel
+                  rows={data.queueRows}
+                  readOnly={useMock}
+                  onSaved={() => refresh()}
+                />
               </div>
             </div>
 
@@ -494,10 +580,26 @@ export function App() {
                   </p>
                 </div>
                 <div style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                  <button type="button" className="btn">
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={() =>
+                      setStubNotice(
+                        'Revocation manifest export is not wired yet — hook to your attestation / chain export when ready.',
+                      )
+                    }
+                  >
                     Download revocation manifest
                   </button>
-                  <button type="button" className="btn btn-primary">
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={() =>
+                      setStubNotice(
+                        'Integrity check is not wired yet — connect verification jobs or chain RPC when ready.',
+                      )
+                    }
+                  >
                     Run integrity check
                   </button>
                 </div>

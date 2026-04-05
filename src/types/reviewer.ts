@@ -4,6 +4,20 @@ export interface EcosystemRole {
   desc: string;
 }
 
+/** Saved reviewer input (API persists in server/data/reviewer-reviews.json). */
+export interface ReportReviewEntry {
+  opinion: string;
+  effect: ReviewEffect;
+  updatedAt: string;
+}
+
+export type ReviewEffect =
+  | 'none'
+  | 'proceed_validation'
+  | 'request_evidence'
+  | 'escalate'
+  | 'hold';
+
 export interface QueueRow {
   id: string;
   title?: string;
@@ -14,6 +28,11 @@ export interface QueueRow {
   assignee: string;
   stage: string;
   submittedAt?: string;
+  /** Public URL to open the filing in the main DPAL app (from upstream or `DPAL_PUBLIC_REPORT_BASE`). */
+  publicUrl?: string;
+  location?: string;
+  /** Last saved reviewer opinion + recommended effect for this report id. */
+  review?: ReportReviewEntry;
 }
 
 export interface ReviewerStat {
