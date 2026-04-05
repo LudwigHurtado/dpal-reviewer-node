@@ -17,6 +17,7 @@ import type {
   VerifierSituationMessage,
 } from '../verifier/types';
 import { demoVerifierReports } from '../data/verifierDemo';
+import { resolveVerifierMediaUrl } from '../lib/mediaUrl';
 
 type Tab = 'verify' | 'actions' | 'history' | 'routing' | 'situation';
 
@@ -652,7 +653,7 @@ export function VerifierPortal() {
                     >
                       {r.thumbnailUrl ? (
                         <img
-                          src={r.thumbnailUrl}
+                          src={resolveVerifierMediaUrl(r.thumbnailUrl)}
                           alt=""
                           width={72}
                           height={72}
@@ -665,7 +666,6 @@ export function VerifierPortal() {
                             background: 'var(--bg-deep)',
                           }}
                           loading="lazy"
-                          referrerPolicy="no-referrer"
                         />
                       ) : null}
                       <div style={{ minWidth: 0 }}>
@@ -763,13 +763,13 @@ export function VerifierPortal() {
                             ev.type === 'image' && ev.file_url ? (
                               <a
                                 key={ev.id}
-                                href={ev.file_url}
+                                href={resolveVerifierMediaUrl(ev.file_url)}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 style={{ display: 'block', lineHeight: 0 }}
                               >
                                 <img
-                                  src={ev.thumbnail_url || ev.file_url}
+                                  src={resolveVerifierMediaUrl(ev.thumbnail_url || ev.file_url)}
                                   alt="Filing evidence"
                                   width={120}
                                   height={120}
@@ -781,7 +781,6 @@ export function VerifierPortal() {
                                     border: '1px solid var(--graphite-border)',
                                   }}
                                   loading="lazy"
-                                  referrerPolicy="no-referrer"
                                 />
                               </a>
                             ) : (
@@ -790,7 +789,7 @@ export function VerifierPortal() {
                                 {ev.file_url ? (
                                   <>
                                     {' · '}
-                                    <a href={ev.file_url} target="_blank" rel="noopener noreferrer">
+                                    <a href={resolveVerifierMediaUrl(ev.file_url)} target="_blank" rel="noopener noreferrer">
                                       open
                                     </a>
                                   </>
@@ -1038,11 +1037,10 @@ export function VerifierPortal() {
                                   {m.text ? <div style={{ marginTop: '0.25rem', whiteSpace: 'pre-wrap' }}>{m.text}</div> : null}
                                   {m.imageUrl ? (
                                     <img
-                                      src={m.imageUrl}
+                                      src={resolveVerifierMediaUrl(m.imageUrl)}
                                       alt=""
                                       style={{ maxWidth: 'min(100%, 280px)', marginTop: '0.35rem', borderRadius: '4px' }}
                                       loading="lazy"
-                                      referrerPolicy="no-referrer"
                                     />
                                   ) : null}
                                 </div>

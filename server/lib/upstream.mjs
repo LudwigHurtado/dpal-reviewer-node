@@ -45,16 +45,51 @@ export function buildPublicReportUrl(reportId) {
 }
 
 /**
- * Turn relative API paths (/api/assets/…) into absolute URLs so the Validator UI (different origin) can load images.
+ * Turn relative API paths (/api/assets/…, /uploads/…) into absolute URLs so the Validator UI (different origin) can load images.
+ * Re-roots absolute URLs that point at the wrong host (localhost, old deploy, Vercel) when the path is clearly main-API media.
  * Blob URLs cannot be resolved cross-origin and are returned as-is (usually unusable in another app).
  */
 export function resolveUpstreamAssetUrl(url) {
-  const u = String(url || '').trim();
+  let u = String(url || '').trim();
   if (!u || u.startsWith('blob:')) return u;
-  if (/^https?:\/\//i.test(u)) return u;
-  const base = process.env.DPAL_UPSTREAM_URL?.replace(/\/$/, '');
-  if (!base) return u;
+  if (u.startsWith('data:')) return u;
+
+  u = u.replace(/\/v1\/assets\//g, '/api/assets/');
+
+  const base = process.env.DPAL_UPSTREAM_URL?.replace(/\/$/, '') || '';
+
+  if (/^https?:\/\//i.test(u)) {
+    if (!base) return u;
+    let parsed;
+    try {
+      parsed = new URL(u);
+    } catch {
+      return u;
+    }
+    const path = parsed.pathname + parsed.search + parsed.hash;
+    const host = parsed.hostname.toLowerCase();
+    const isMainApiMedia = path.startsWith('/uploads') || path.startsWith('/api/assets');
+    let upstreamHost = '';
+    try {
+      upstreamHost = new URL(base).hostname.toLowerCase();
+    } catch {
+      return u;
+    }
+    const legacyOrLocalHost =
+      host === 'localhost' ||
+      host === '127.0.0.1' ||
+      host === 'api.dpal.net' ||
+      host.endsWith('.vercel.app');
+    /** Same path on a different Railway deploy (URL in DB predates current DPAL_UPSTREAM_URL). */
+    const staleRailway = host.endsWith('.up.railway.app') && host !== upstreamHost;
+    if (isMainApiMedia && (legacyOrLocalHost || staleRailway)) {
+      return `${base}${path.startsWith('/') ? path : `/${path}`}`;
+    }
+    return u;
+  }
+
   if (u.startsWith('//')) return `https:${u}`;
+  if (!base) return u;
   if (u.startsWith('/')) return `${base}${u}`;
   return `${base}/${u}`;
 }
