@@ -2,6 +2,44 @@ export type CategoryKey = 'environmental' | 'housing' | 'labor' | 'public_safety
 
 export type Severity = 'low' | 'medium' | 'high' | 'urgent';
 
+export type VerifierDisposition =
+  | 'under_review'
+  | 'verified'
+  | 'needs_more_evidence'
+  | 'urgent'
+  | 'duplicate'
+  | 'false_unsupported'
+  | 'closed_no_action'
+  | 'escalated'
+  | 'action_taken'
+  | 'follow_up_requested';
+
+export interface VerifierCaseState {
+  disposition: VerifierDisposition | string;
+  assignedVerifier: string;
+  assignedSupervisor: string;
+  deadline: string | null;
+  redactionNotes: string;
+  reporterFacingStatus: string;
+  lastReviewedBy: string;
+  lastReviewedAt: string | null;
+  updatedAt?: string;
+  updatedBy?: string;
+}
+
+export interface VerifierAiTriage {
+  summary: string;
+  urgency: string;
+  credibility_estimate: number;
+  destination: string;
+  missing_info: string[];
+  draft_email: string;
+  draft_call_summary: string;
+  why_recommended: string;
+  category_suggestion?: string;
+  mode?: string;
+}
+
 export interface VerifierQueueRow {
   id: string;
   title: string;
@@ -60,10 +98,17 @@ export interface VerifierSituationMessage {
   audioUrl?: string;
 }
 
+export interface VerifierDetailMeta {
+  dispositions?: string[];
+  accountabilityFields?: string[];
+}
+
 export interface VerifierDetailResponse {
   ok: boolean;
   report: VerifierReportDetail;
-  notes: { text: string; updatedAt: string | null };
+  caseState?: VerifierCaseState;
+  meta?: VerifierDetailMeta;
+  notes: { text: string; updatedAt: string | null; updatedBy?: string };
   timeline: TimelineEvent[];
   situationMessages?: VerifierSituationMessage[];
 }
@@ -88,4 +133,10 @@ export interface VerifierActionResponse {
   ok: boolean;
   action?: unknown;
   warning?: string;
+  upstream?: unknown;
+  delivery?: { sent?: boolean; reason?: string; id?: string };
+  hint?: string;
+  triage?: VerifierAiTriage;
+  script?: string;
+  caseState?: VerifierCaseState;
 }

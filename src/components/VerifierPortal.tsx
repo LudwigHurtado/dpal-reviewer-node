@@ -2,15 +2,20 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   fetchVerifierQueue,
   fetchVerifierReportDetail,
+  getVerifierIdentity,
   postOutboundAction,
   postRequestEvidence,
   postVerifierNotes,
   postVerify,
+  setVerifierIdentity,
 } from '../api/verifierClient';
+import { VerifierCaseWorkspace } from './VerifierCaseWorkspace';
 import { categoryPlaybooks } from '../verifier/categoryPlaybooks';
 import type {
   CategoryKey,
   Severity,
+  VerifierCaseState,
+  VerifierDetailMeta,
   VerifierQueueRow,
   VerifierReportDetail,
   TimelineEvent,
@@ -60,6 +65,8 @@ function syntheticDetail(row: VerifierQueueRow): {
   notes: { text: string; updatedAt: string | null };
   timeline: TimelineEvent[];
   situationMessages: VerifierSituationMessage[];
+  caseState: VerifierCaseState;
+  meta: VerifierDetailMeta;
 } {
   return {
     report: {
@@ -87,6 +94,30 @@ function syntheticDetail(row: VerifierQueueRow): {
       },
     ],
     situationMessages: [],
+    caseState: {
+      disposition: 'under_review',
+      assignedVerifier: '',
+      assignedSupervisor: '',
+      deadline: null,
+      redactionNotes: '',
+      reporterFacingStatus: 'under_review',
+      lastReviewedBy: '',
+      lastReviewedAt: null,
+    },
+    meta: {
+      dispositions: [
+        'under_review',
+        'verified',
+        'needs_more_evidence',
+        'urgent',
+        'duplicate',
+        'false_unsupported',
+        'closed_no_action',
+        'escalated',
+        'action_taken',
+        'follow_up_requested',
+      ],
+    },
   };
 }
 
@@ -105,7 +136,14 @@ export function VerifierPortal() {
     notes: { text: string; updatedAt: string | null };
     timeline: TimelineEvent[];
     situationMessages: VerifierSituationMessage[];
+    caseState?: VerifierCaseState;
+    meta?: VerifierDetailMeta;
   } | null>(null);
+
+  const [verifierIdentity, setVerifierIdentityState] = useState('');
+  useEffect(() => {
+    setVerifierIdentityState(getVerifierIdentity());
+  }, []);
 
   const [tab, setTab] = useState<Tab>('verify');
   const [query, setQuery] = useState('');
@@ -210,6 +248,8 @@ export function VerifierPortal() {
             notes: d.notes,
             timeline: d.timeline || [],
             situationMessages: d.situationMessages ?? [],
+            caseState: d.caseState,
+            meta: d.meta,
           });
           setNotes(d.notes?.text || '');
         }
@@ -407,7 +447,30 @@ export function VerifierPortal() {
               )}
             </div>
           </div>
-          <div className="top-bar-actions">
+          <div className="top-bar-actions" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.65rem' }}>
+            <label style={{ fontSize: '0.72rem', color: 'var(--silver-dim)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+              Verifier identity
+              <input
+                type="text"
+                value={verifierIdentity}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setVerifierIdentityState(v);
+                  setVerifierIdentity(v);
+                }}
+                placeholder="Name or staff ID"
+                autoComplete="username"
+                style={{
+                  width: 'min(42vw, 200px)',
+                  padding: '0.4rem 0.55rem',
+                  fontSize: '0.78rem',
+                  background: 'var(--bg-deep)',
+                  border: '1px solid var(--graphite-border)',
+                  borderRadius: '6px',
+                  color: 'var(--silver)',
+                }}
+              />
+            </label>
             <button type="button" className="btn" onClick={() => void loadQueue()} disabled={loading}>
               {loading ? 'Refreshing…' : 'Refresh queue'}
             </button>
@@ -811,6 +874,20 @@ export function VerifierPortal() {
                         </div>
                       </div>
                     </div>
+
+                    {selectedId && detail?.report ? (
+                      <VerifierCaseWorkspace
+                        reportId={detail.report.id}
+                        caseState={detail.caseState}
+                        meta={detail.meta}
+                        priorActions={(detail.report.priorActions || []) as unknown[]}
+                        useDemo={useDemo}
+                        onRefresh={async () => {
+                          if (selectedId) await loadDetail(selectedId);
+                        }}
+                        setNotice={setNotice}
+                      />
+                    ) : null}
 
                     <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', marginTop: '1rem' }}>
                       {(['verify', 'actions', 'history', 'situation', 'routing'] as Tab[]).map((t) => (

@@ -14,12 +14,41 @@ import {
   logAction,
   getTimeline,
   getActionsForReport,
+  getCaseState,
+  mergeCaseState,
+  updateActionEntry,
 } from './lib/verifierAudit.mjs';
+import { getVerifierIdentity } from './lib/verifierIdentity.mjs';
+import {
+  patchUpstreamOpsStatus,
+  opsStatusForDisposition,
+  reporterLineForDisposition,
+} from './lib/verifierUpstreamSync.mjs';
+import { sendEmailIfConfigured } from './lib/verifierEmail.mjs';
+import { runVerifierAiTriage, generateCallScript } from './lib/verifierAiTriage.mjs';
+
+const DISPOSITIONS = new Set([
+  'under_review',
+  'verified',
+  'needs_more_evidence',
+  'urgent',
+  'duplicate',
+  'false_unsupported',
+  'closed_no_action',
+  'escalated',
+  'action_taken',
+  'follow_up_requested',
+]);
+
+function syncDispositionUpstream(reportId, disposition, performedBy, extraNote = '') {
+  const line = reporterLineForDisposition(disposition, extraNote);
+  const ops = opsStatusForDisposition(disposition);
+  return patchUpstreamOpsStatus(reportId, ops, `[Verifier ${performedBy}] ${line}`);
+}
 
 export function createVerifierPortalRouter() {
   const router = Router();
 
-  /** GET /reports — live queue */
   router.get('/reports', async (_req, res) => {
     try {
       const result = await fetchUpstreamVerifierFeedResult();
@@ -62,13 +91,11 @@ export function createVerifierPortalRouter() {
     }
   });
 
-  /** Must be registered before `/reports/:reportId` or `timeline` is captured as an id. */
   router.get('/reports/:reportId/timeline', (req, res) => {
     const reportId = decodeURIComponent(req.params.reportId || '').trim();
     return res.json({ ok: true, events: getTimeline(reportId) });
   });
 
-  /** GET /reports/:id — detail + audit merge */
   router.get('/reports/:reportId', async (req, res) => {
     try {
       const reportId = decodeURIComponent(req.params.reportId || '').trim();
@@ -113,6 +140,7 @@ export function createVerifierPortalRouter() {
       const timeline = getTimeline(reportId);
       const priorActions = getActionsForReport(reportId);
       const situationMessages = await fetchUpstreamSituationMessages(reportId);
+      const caseState = getCaseState(reportId);
 
       const syntheticRaw = {
         id: doc.id || reportId,
@@ -144,10 +172,99 @@ export function createVerifierPortalRouter() {
           priorActions,
           recommendedRouting: row.categoryKey,
         },
+        caseState,
         notes,
         timeline,
         situationMessages,
+        meta: {
+          dispositions: [...DISPOSITIONS],
+          accountabilityFields: [
+            'destination_name',
+            'destination_email',
+            'destination_phone',
+            'sent_at',
+            'response_recorded_at',
+            'response_summary',
+            'resolution',
+            'no_action_reason',
+          ],
+        },
       });
+    } catch (e) {
+      console.error(e);
+      return res.status(500).json({ ok: false, error: String(e?.message || e) });
+    }
+  });
+
+  /** Full case patch: disposition, assignments, deadline, redaction */
+  router.patch('/reports/:reportId/case', (req, res) => {
+    try {
+      const reportId = decodeURIComponent(req.params.reportId || '').trim();
+      const who = getVerifierIdentity(req);
+      const b = req.body || {};
+      const patch = {};
+      if (b.disposition != null) {
+        const d = String(b.disposition).trim();
+        if (!DISPOSITIONS.has(d)) {
+          return res.status(400).json({ ok: false, error: 'invalid_disposition', allowed: [...DISPOSITIONS] });
+        }
+        patch.disposition = d;
+        patch.reporterFacingStatus = b.reporterFacingStatus || d;
+      }
+      if (b.assignedVerifier != null) patch.assignedVerifier = String(b.assignedVerifier).slice(0, 200);
+      if (b.assignedSupervisor != null) patch.assignedSupervisor = String(b.assignedSupervisor).slice(0, 200);
+      if (b.deadline != null) patch.deadline = b.deadline === '' ? null : String(b.deadline);
+      if (b.redactionNotes != null) patch.redactionNotes = String(b.redactionNotes).slice(0, 8000);
+      patch.lastReviewedBy = who;
+      patch.lastReviewedAt = new Date().toISOString();
+
+      const next = mergeCaseState(reportId, patch, who, {
+        label: 'Case workspace updated',
+        detail: Object.keys(patch).join(', '),
+      });
+
+      let upstream = null;
+      if (patch.disposition) {
+        upstream = syncDispositionUpstream(reportId, patch.disposition, who, b.publicNote || '');
+      }
+
+      return res.json({ ok: true, caseState: next, upstream });
+    } catch (e) {
+      console.error(e);
+      return res.status(500).json({ ok: false, error: String(e?.message || e) });
+    }
+  });
+
+  /** One-click disposition (convenience) */
+  router.post('/reports/:reportId/disposition', (req, res) => {
+    try {
+      const reportId = decodeURIComponent(req.params.reportId || '').trim();
+      const who = getVerifierIdentity(req);
+      const d = String(req.body?.disposition || '').trim();
+      if (!DISPOSITIONS.has(d)) {
+        return res.status(400).json({ ok: false, error: 'invalid_disposition', allowed: [...DISPOSITIONS] });
+      }
+      const note = String(req.body?.note || '');
+      const next = mergeCaseState(
+        reportId,
+        {
+          disposition: d,
+          reporterFacingStatus: d,
+          lastReviewedBy: who,
+          lastReviewedAt: new Date().toISOString(),
+        },
+        who,
+        { label: `Disposition: ${d}`, detail: note.slice(0, 400) },
+      );
+      logAction(reportId, {
+        actionType: 'disposition',
+        label: `Marked: ${d}`,
+        summary: note,
+        disposition: d,
+        performed_by: who,
+      });
+      const upstream = syncDispositionUpstream(reportId, d, who, note);
+      return res.json({ ok: true, caseState: next, upstream });
     } catch (e) {
       console.error(e);
       return res.status(500).json({ ok: false, error: String(e?.message || e) });
@@ -157,8 +274,9 @@ export function createVerifierPortalRouter() {
   router.post('/reports/:reportId/notes', (req, res) => {
     try {
       const reportId = decodeURIComponent(req.params.reportId || '').trim();
-      const { text, performedBy } = req.body || {};
-      const n = saveNotes(reportId, text, performedBy || 'verifier');
+      const who = getVerifierIdentity(req);
+      const { text } = req.body || {};
+      const n = saveNotes(reportId, text, who);
       return res.json({ ok: true, notes: n });
     } catch (e) {
       return res.status(500).json({ ok: false, error: String(e?.message || e) });
@@ -168,6 +286,7 @@ export function createVerifierPortalRouter() {
   router.post('/reports/:reportId/verify', (req, res) => {
     try {
       const reportId = decodeURIComponent(req.params.reportId || '').trim();
+      const who = getVerifierIdentity(req);
       const body = req.body || {};
       const entry = logAction(reportId, {
         actionType: 'verify',
@@ -176,8 +295,16 @@ export function createVerifierPortalRouter() {
         decision: body.decision,
         credibility_score: body.credibility_score,
         evidence_score: body.evidence_score,
-        performed_by: body.performedBy || 'verifier',
+        performed_by: who,
+        reviewed_by: who,
+        recorded_at: new Date().toISOString(),
       });
+      mergeCaseState(
+        reportId,
+        { lastReviewedBy: who, lastReviewedAt: new Date().toISOString() },
+        who,
+        { label: 'Verification logged', detail: '' },
+      );
       return res.json({ ok: true, action: entry });
     } catch (e) {
       return res.status(500).json({ ok: false, error: String(e?.message || e) });
@@ -187,12 +314,137 @@ export function createVerifierPortalRouter() {
   router.post('/reports/:reportId/request-evidence', (req, res) => {
     try {
       const reportId = decodeURIComponent(req.params.reportId || '').trim();
-      const { message, performedBy } = req.body || {};
+      const who = getVerifierIdentity(req);
+      const { message } = req.body || {};
       const entry = logAction(reportId, {
         actionType: 'request_evidence',
         label: 'More evidence requested',
         summary: String(message || ''),
-        performed_by: performedBy || 'verifier',
+        performed_by: who,
+        recorded_at: new Date().toISOString(),
+      });
+      mergeCaseState(
+        reportId,
+        {
+          disposition: 'needs_more_evidence',
+          reporterFacingStatus: 'needs_more_evidence',
+          lastReviewedBy: who,
+          lastReviewedAt: new Date().toISOString(),
+        },
+        who,
+        { label: 'Evidence requested', detail: String(message || '').slice(0, 200) },
+      );
+      const upstream = syncDispositionUpstream(reportId, 'needs_more_evidence', who, String(message || ''));
+      return res.json({ ok: true, action: entry, upstream });
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: String(e?.message || e) });
+    }
+  });
+
+  router.post('/reports/:reportId/ai-triage', async (req, res) => {
+    try {
+      const reportId = decodeURIComponent(req.params.reportId || '').trim();
+      const doc = await fetchUpstreamReportById(reportId);
+      if (!doc || doc.error) return res.status(404).json({ ok: false, error: 'report_not_found' });
+      const p = doc.payload && typeof doc.payload === 'object' ? doc.payload : doc;
+      const mergedUrls = collectImageUrlStringsFromReportShape(doc);
+      const triage = await runVerifierAiTriage({
+        title: p.title ?? doc.title,
+        description: p.description ?? doc.description,
+        category: p.category ?? doc.category,
+        location: p.location ?? doc.location,
+        evidenceCount: mergedUrls.length,
+      });
+      return res.json({ ok: true, triage });
+    } catch (e) {
+      console.error(e);
+      return res.status(500).json({ ok: false, error: String(e?.message || e) });
+    }
+  });
+
+  router.post('/reports/:reportId/actions/call-script', async (req, res) => {
+    try {
+      const reportId = decodeURIComponent(req.params.reportId || '').trim();
+      const doc = await fetchUpstreamReportById(reportId);
+      if (!doc || doc.error) return res.status(404).json({ ok: false, error: 'report_not_found' });
+      const p = doc.payload && typeof doc.payload === 'object' ? doc.payload : doc;
+      const script = await generateCallScript({
+        title: p.title ?? doc.title,
+        description: p.description ?? doc.description,
+        category: p.category ?? doc.category,
+        location: p.location ?? doc.location,
+      });
+      return res.json({ ok: true, ...script });
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: String(e?.message || e) });
+    }
+  });
+
+  /** Email city/agency — logs + optional Resend delivery */
+  router.post('/reports/:reportId/actions/email', async (req, res) => {
+    try {
+      const reportId = decodeURIComponent(req.params.reportId || '').trim();
+      const who = getVerifierIdentity(req);
+      const b = req.body || {};
+      const to = b.destination_email || b.to;
+      const subject = b.subject || `DPAL verifier — report ${reportId}`;
+      const html = b.html || (b.message ? `<pre>${String(b.message).replace(/</g, '&lt;')}</pre>` : '');
+      const entry = logAction(reportId, {
+        actionType: 'email',
+        label: 'Email to agency',
+        destination_name: b.destination_name,
+        destination_email: to,
+        summary: b.message || b.summary || '',
+        performed_by: who,
+        status: 'logged',
+        recorded_at: new Date().toISOString(),
+        sent_to: to,
+      });
+
+      let delivery = { sent: false };
+      let actionOut = entry;
+      if (to) {
+        delivery = await sendEmailIfConfigured({
+          to,
+          subject,
+          html: html || String(b.message || ''),
+          text: b.message,
+        });
+        if (delivery.sent) {
+          const u = updateActionEntry(entry.id, {
+            sent_at: new Date().toISOString(),
+            delivery_provider: 'resend',
+            delivery_id: delivery.id,
+            status: 'sent',
+          });
+          if (u) actionOut = u;
+        }
+      }
+
+      return res.json({
+        ok: true,
+        action: actionOut,
+        delivery,
+        hint: delivery.sent ? undefined : 'Set RESEND_API_KEY and VERIFIER_FROM_EMAIL to send real email.',
+      });
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: String(e?.message || e) });
+    }
+  });
+
+  router.post('/reports/:reportId/actions/call', (req, res) => {
+    try {
+      const reportId = decodeURIComponent(req.params.reportId || '').trim();
+      const who = getVerifierIdentity(req);
+      const b = req.body || {};
+      const entry = logAction(reportId, {
+        actionType: 'call',
+        label: 'Phone outreach (logged)',
+        destination_name: b.destination_name,
+        destination_phone: b.destination_phone,
+        summary: b.message || b.summary || '',
+        performed_by: who,
+        recorded_at: new Date().toISOString(),
       });
       return res.json({ ok: true, action: entry });
     } catch (e) {
@@ -200,41 +452,261 @@ export function createVerifierPortalRouter() {
     }
   });
 
-  function actionHandler(actionLabel) {
-    return (req, res) => {
-      try {
-        const reportId = decodeURIComponent(req.params.reportId || '').trim();
-        const body = req.body || {};
-        const entry = logAction(reportId, {
-          actionType: body.action_type || actionLabel,
-          label: actionLabel,
-          destination_name: body.destination_name,
-          destination_email: body.destination_email,
-          destination_phone: body.destination_phone,
-          summary: body.message || body.summary || '',
-          action_payload: body,
-          performed_by: body.performedBy || 'verifier',
-          status: 'logged',
+  /** Structured phone log */
+  router.post('/reports/:reportId/actions/phone-log', (req, res) => {
+    try {
+      const reportId = decodeURIComponent(req.params.reportId || '').trim();
+      const who = getVerifierIdentity(req);
+      const b = req.body || {};
+      const entry = logAction(reportId, {
+        actionType: 'phone_log',
+        label: 'Phone call logged',
+        destination_phone: b.called_number || b.destination_phone,
+        duration_minutes: b.duration_min,
+        reached_contact: Boolean(b.reached_contact),
+        summary: b.summary || b.message || '',
+        performed_by: who,
+        recorded_at: new Date().toISOString(),
+        sent_at: b.ended_at || new Date().toISOString(),
+      });
+      return res.json({ ok: true, action: entry });
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: String(e?.message || e) });
+    }
+  });
+
+  router.post('/reports/:reportId/actions/escalate', (req, res) => {
+    try {
+      const reportId = decodeURIComponent(req.params.reportId || '').trim();
+      const who = getVerifierIdentity(req);
+      const b = req.body || {};
+      const entry = logAction(reportId, {
+        actionType: 'escalate',
+        label: 'Escalation',
+        destination_name: b.destination_name,
+        summary: b.message || b.summary || '',
+        performed_by: who,
+        recorded_at: new Date().toISOString(),
+      });
+      mergeCaseState(
+        reportId,
+        {
+          disposition: 'escalated',
+          lastReviewedBy: who,
+          lastReviewedAt: new Date().toISOString(),
+        },
+        who,
+        { label: 'Escalated', detail: '' },
+      );
+      const upstream = syncDispositionUpstream(reportId, 'escalated', who, b.message || '');
+      return res.json({ ok: true, action: entry, upstream });
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: String(e?.message || e) });
+    }
+  });
+
+  router.post('/reports/:reportId/actions/escalate-emergency', (req, res) => {
+    try {
+      const reportId = decodeURIComponent(req.params.reportId || '').trim();
+      const who = getVerifierIdentity(req);
+      const b = req.body || {};
+      const entry = logAction(reportId, {
+        actionType: 'escalate_emergency',
+        label: 'Emergency risk escalation',
+        summary: b.message || b.summary || '',
+        destination_phone: b.destination_phone,
+        destination_name: b.destination_name,
+        performed_by: who,
+        recorded_at: new Date().toISOString(),
+      });
+      mergeCaseState(
+        reportId,
+        {
+          disposition: 'urgent',
+          lastReviewedBy: who,
+          lastReviewedAt: new Date().toISOString(),
+        },
+        who,
+        { label: 'Emergency escalation', detail: '' },
+      );
+      const upstream = patchUpstreamOpsStatus(reportId, 'Investigating', `[EMERGENCY] ${b.message || 'Escalated'} (${who})`);
+      return res.json({ ok: true, action: entry, upstream });
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: String(e?.message || e) });
+    }
+  });
+
+  router.post('/reports/:reportId/actions/legal-referral', (req, res) => {
+    try {
+      const reportId = decodeURIComponent(req.params.reportId || '').trim();
+      const who = getVerifierIdentity(req);
+      const b = req.body || {};
+      const entry = logAction(reportId, {
+        actionType: 'legal_referral',
+        label: 'Legal referral',
+        destination_name: b.destination_name,
+        destination_email: b.destination_email,
+        summary: b.message || b.summary || '',
+        performed_by: who,
+        recorded_at: new Date().toISOString(),
+      });
+      return res.json({ ok: true, action: entry });
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: String(e?.message || e) });
+    }
+  });
+
+  router.post('/reports/:reportId/actions/nonprofit-referral', (req, res) => {
+    try {
+      const reportId = decodeURIComponent(req.params.reportId || '').trim();
+      const who = getVerifierIdentity(req);
+      const b = req.body || {};
+      const entry = logAction(reportId, {
+        actionType: 'nonprofit_referral',
+        label: 'Nonprofit referral',
+        destination_name: b.destination_name,
+        destination_email: b.destination_email,
+        destination_phone: b.destination_phone,
+        summary: b.message || b.summary || '',
+        performed_by: who,
+        recorded_at: new Date().toISOString(),
+      });
+      return res.json({ ok: true, action: entry });
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: String(e?.message || e) });
+    }
+  });
+
+  router.post('/reports/:reportId/actions/assign-followup', (req, res) => {
+    try {
+      const reportId = decodeURIComponent(req.params.reportId || '').trim();
+      const who = getVerifierIdentity(req);
+      const b = req.body || {};
+      const entry = logAction(reportId, {
+        actionType: 'assign_followup',
+        label: 'Internal follow-up task',
+        destination_name: b.assignee || b.destination_name,
+        summary: b.message || b.summary || '',
+        due_at: b.due_at,
+        performed_by: who,
+        recorded_at: new Date().toISOString(),
+      });
+      return res.json({ ok: true, action: entry });
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: String(e?.message || e) });
+    }
+  });
+
+  router.post('/reports/:reportId/actions/internal-followup', (req, res) => {
+    try {
+      const reportId = decodeURIComponent(req.params.reportId || '').trim();
+      const who = getVerifierIdentity(req);
+      const b = req.body || {};
+      const entry = logAction(reportId, {
+        actionType: 'internal_followup',
+        label: 'Internal follow-up (task)',
+        destination_name: b.assignee,
+        summary: b.summary || b.message || '',
+        due_at: b.due_at,
+        performed_by: who,
+        recorded_at: new Date().toISOString(),
+      });
+      return res.json({ ok: true, action: entry });
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: String(e?.message || e) });
+    }
+  });
+
+  /** Notify reporter — log + optional email if RESEND + reporter email provided */
+  router.post('/reports/:reportId/actions/notify-reporter', async (req, res) => {
+    try {
+      const reportId = decodeURIComponent(req.params.reportId || '').trim();
+      const who = getVerifierIdentity(req);
+      const b = req.body || {};
+      const entry = logAction(reportId, {
+        actionType: 'notify_reporter',
+        label: 'Reporter notification',
+        summary: b.message || '',
+        destination_email: b.reporter_email,
+        channel: b.channel || 'log',
+        performed_by: who,
+        recorded_at: new Date().toISOString(),
+      });
+      let delivery = { sent: false };
+      if (b.reporter_email && b.message) {
+        delivery = await sendEmailIfConfigured({
+          to: b.reporter_email,
+          subject: b.subject || `Update on your report (${reportId})`,
+          html: `<p>${String(b.message).replace(/</g, '&lt;')}</p>`,
         });
-        return res.json({
-          ok: true,
-          action: entry,
-          warning:
-            'This creates an audit log entry only. Wire email/SMS/voice providers to perform real outbound delivery.',
-        });
-      } catch (e) {
-        return res.status(500).json({ ok: false, error: String(e?.message || e) });
+        if (delivery.sent) {
+          updateActionEntry(entry.id, { sent_at: new Date().toISOString(), status: 'sent' });
+        }
       }
-    };
-  }
+      const upstream = b.public_line
+        ? patchUpstreamOpsStatus(reportId, 'Investigating', `[Reporter update] ${b.public_line}`.slice(0, 800))
+        : null;
+      return res.json({ ok: true, action: entry, delivery, upstream });
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: String(e?.message || e) });
+    }
+  });
 
-  router.post('/reports/:reportId/actions/call', actionHandler('call'));
-  router.post('/reports/:reportId/actions/email', actionHandler('email'));
-  router.post('/reports/:reportId/actions/escalate', actionHandler('escalate'));
-  router.post('/reports/:reportId/actions/legal-referral', actionHandler('legal_referral'));
-  router.post('/reports/:reportId/actions/assign-followup', actionHandler('assign_followup'));
+  /** Attach accountability fields to an existing action row */
+  router.post('/reports/:reportId/actions/:actionId/accountability', (req, res) => {
+    try {
+      const reportId = decodeURIComponent(req.params.reportId || '').trim();
+      const actionId = decodeURIComponent(req.params.actionId || '').trim();
+      const who = getVerifierIdentity(req);
+      const b = req.body || {};
+      const updated = updateActionEntry(actionId, {
+        response_recorded_at: b.response_recorded_at || new Date().toISOString(),
+        response_summary: b.response_summary,
+        resolution: b.resolution,
+        no_action_reason: b.no_action_reason,
+        recorded_to_whom: b.recorded_to_whom,
+        performed_by: who,
+      });
+      if (!updated || updated.reportId !== reportId) {
+        return res.status(404).json({ ok: false, error: 'action_not_found' });
+      }
+      return res.json({ ok: true, action: updated });
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: String(e?.message || e) });
+    }
+  });
 
-  /** Optional: export full audit (admin) */
+  /** Close with explicit “why no action” */
+  router.post('/reports/:reportId/close', (req, res) => {
+    try {
+      const reportId = decodeURIComponent(req.params.reportId || '').trim();
+      const who = getVerifierIdentity(req);
+      const reason = String(req.body?.no_action_reason || req.body?.reason || '').slice(0, 2000);
+      const entry = logAction(reportId, {
+        actionType: 'closure',
+        label: 'Closed — no action / resolved',
+        summary: reason,
+        no_action_reason: reason,
+        performed_by: who,
+        recorded_at: new Date().toISOString(),
+      });
+      const next = mergeCaseState(
+        reportId,
+        {
+          disposition: 'closed_no_action',
+          lastReviewedBy: who,
+          lastReviewedAt: new Date().toISOString(),
+        },
+        who,
+        { label: 'Case closed', detail: reason.slice(0, 300) },
+      );
+      const upstream = syncDispositionUpstream(reportId, 'closed_no_action', who, reason);
+      return res.json({ ok: true, action: entry, caseState: next, upstream });
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: String(e?.message || e) });
+    }
+  });
+
   router.get('/audit/export', (_req, res) => {
     try {
       return res.json(readAudit());
