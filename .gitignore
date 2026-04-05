@@ -7,3 +7,6 @@ dist
 !.env.example
 .vercel
 .env*.local
+
+# Nested clone of https://github.com/LudwigHurtado/dpal-ai-server — separate repo; push from that folder, not from this tree
+dpal-ai-server/
