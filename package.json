@@ -8,6 +8,7 @@
     "dev": "vite",
     "dev:api": "node server/index.mjs",
     "dev:all": "concurrently -k \"npm run dev:api\" \"npm run dev\"",
+    "start": "node server/index.mjs",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "lint": "tsc --noEmit"
