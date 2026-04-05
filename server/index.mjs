@@ -62,8 +62,21 @@ function upstreamBase() {
 }
 
 const app = express();
+app.set('trust proxy', 1);
 app.use(cors({ origin: true }));
 app.use(express.json({ limit: '2mb' }));
+
+/** Root — valid JSON so opening the Railway URL in a browser is not an empty/invalid HTTP response. */
+app.get('/', (_req, res) => {
+  res.json({
+    ok: true,
+    service: 'dpal-reviewer-api',
+    hint:
+      'This host is the JSON API only. Open the Verifier Action Portal on Vercel (set VITE_API_BASE_URL to this origin + /api).',
+    health: '/api/reviewer/v1/health',
+    verifierQueue: '/api/reviewer/v1/verifier/reports',
+  });
+});
 
 /** Full dashboard payload (primary contract for the Review-Node UI). */
 app.get('/api/reviewer/v1/dashboard', async (_req, res) => {
@@ -165,8 +178,9 @@ app.get('/api/reviewer/v1/health', (_req, res) => {
   });
 });
 
-const server = app.listen(PORT, () => {
-  console.log(`DPAL reviewer API listening on http://127.0.0.1:${PORT}`);
+const HOST = process.env.HOST || '0.0.0.0';
+const server = app.listen(PORT, HOST, () => {
+  console.log(`DPAL reviewer API listening on http://${HOST}:${PORT}`);
   if (process.env.DPAL_UPSTREAM_URL) {
     console.log(
       `  Upstream reports: ${process.env.DPAL_UPSTREAM_URL}${process.env.DPAL_UPSTREAM_REPORTS_PATH || '/api/reports/feed'}`,
