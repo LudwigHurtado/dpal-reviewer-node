@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { fetchUpstreamReports, buildPublicReportUrl } from './lib/upstream.mjs';
 import { readReviews, upsertReview, ALLOWED_EFFECTS } from './lib/reviewsStore.mjs';
+import { createVerifierPortalRouter } from './verifierRoutes.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DATA_FILE = join(__dirname, 'data', 'dashboard.json');
@@ -51,33 +52,6 @@ async function computeDashboardPayload() {
 
 function upstreamBase() {
   return process.env.DPAL_UPSTREAM_URL?.replace(/\/$/, '') || '';
-}
-
-async function proxyUpstreamJson(method, upstreamPath, body) {
-  const base = upstreamBase();
-  if (!base) {
-    return { status: 503, json: { ok: false, error: 'upstream_not_configured' } };
-  }
-  const url = `${base}${upstreamPath.startsWith('/') ? upstreamPath : `/${upstreamPath}`}`;
-  const headers = { Accept: 'application/json' };
-  const auth = process.env.DPAL_UPSTREAM_AUTH_HEADER;
-  if (auth) headers.Authorization = auth;
-  if (body != null) {
-    headers['Content-Type'] = 'application/json';
-  }
-  const res = await fetch(url, {
-    method,
-    headers,
-    body: body != null ? JSON.stringify(body) : undefined,
-  });
-  const text = await res.text();
-  let json;
-  try {
-    json = text ? JSON.parse(text) : {};
-  } catch {
-    json = { ok: false, raw: text.slice(0, 500) };
-  }
-  return { status: res.status, json };
 }
 
 const app = express();
@@ -167,59 +141,20 @@ app.post('/api/reviewer/v1/reports/:reportId/review', (req, res) => {
 });
 
 /**
- * Proxy: list situation rooms on main DPAL API (Mongo-backed chat rooms).
- * Requires DPAL_UPSTREAM_URL (same Railway / dpel-ai-server host).
+ * Verifier Action Portal — live queue, detail, verify, outbound actions, timeline (local audit JSON).
+ * Mirrors desired contract: GET/POST /api/reviewer/v1/verifier/reports/…
  */
-app.get('/api/reviewer/v1/situation/rooms', async (_req, res) => {
-  try {
-    const { status, json } = await proxyUpstreamJson('GET', '/api/situation/rooms');
-    return res.status(status).json(json);
-  } catch (e) {
-    console.error(e);
-    res.status(502).json({ ok: false, error: 'upstream_proxy_failed', detail: String(e?.message || e) });
-  }
-});
-
-/** Proxy: GET messages for a situation room (real-time polling from UI). */
-app.get('/api/reviewer/v1/situation/:roomId/messages', async (req, res) => {
-  try {
-    const roomId = encodeURIComponent(String(req.params.roomId || '').trim());
-    const lim = req.query.limit != null ? `?limit=${encodeURIComponent(String(req.query.limit))}` : '';
-    const { status, json } = await proxyUpstreamJson('GET', `/api/situation/${roomId}/messages${lim}`);
-    return res.status(status).json(json);
-  } catch (e) {
-    console.error(e);
-    res.status(502).json({ ok: false, error: 'upstream_proxy_failed', detail: String(e?.message || e) });
-  }
-});
-
-/**
- * Proxy: POST a message as the review node (moderation / guidance).
- * Body matches main API: { sender, text, imageUrl?, audioUrl?, isSystem? }
- */
-app.post('/api/reviewer/v1/situation/:roomId/messages', async (req, res) => {
-  try {
-    const roomId = encodeURIComponent(String(req.params.roomId || '').trim());
-    const body = {
-      ...req.body,
-      sender: req.body?.sender || 'DPAL Review Node',
-    };
-    const { status, json } = await proxyUpstreamJson('POST', `/api/situation/${roomId}/messages`, body);
-    return res.status(status).json(json);
-  } catch (e) {
-    console.error(e);
-    res.status(502).json({ ok: false, error: 'upstream_proxy_failed', detail: String(e?.message || e) });
-  }
-});
+app.use('/api/reviewer/v1/verifier', createVerifierPortalRouter());
 
 /** Health for load balancers / dev. */
 app.get('/api/reviewer/v1/health', (_req, res) => {
   res.json({
     ok: true,
     service: 'dpal-reviewer-api',
-    version: '2',
+    version: '3',
     upstream: Boolean(upstreamBase()),
     sseMs: SSE_INTERVAL_MS,
+    verifierPortal: true,
   });
 });
 
@@ -229,7 +164,7 @@ const server = app.listen(PORT, () => {
     console.log(
       `  Upstream reports: ${process.env.DPAL_UPSTREAM_URL}${process.env.DPAL_UPSTREAM_REPORTS_PATH || '/api/reports/feed'}`,
     );
-    console.log('  Situation chat proxy: /api/reviewer/v1/situation/* → /api/situation/*');
+    console.log('  Verifier portal: /api/reviewer/v1/verifier/*');
   }
   if (process.env.DPAL_PUBLIC_REPORT_BASE) {
     console.log(`  Public report links: ${process.env.DPAL_PUBLIC_REPORT_BASE} (?reportId=…)`);

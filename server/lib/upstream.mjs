@@ -112,3 +112,52 @@ export async function fetchUpstreamReports() {
 
   return list.map(mapUpstreamReport);
 }
+
+/** Raw feed items (before mapUpstreamReport) for verifier evidence counts etc. */
+export async function fetchUpstreamFeedRawList() {
+  const base = process.env.DPAL_UPSTREAM_URL?.replace(/\/$/, '');
+  if (!base) return null;
+
+  let path = process.env.DPAL_UPSTREAM_REPORTS_PATH || '/api/reports/feed';
+  if (!path.startsWith('/')) path = `/${path}`;
+
+  let url = `${base}${path}`;
+  if (isFeedPath(path) && !/[?&]limit=/.test(url)) {
+    url += url.includes('?') ? '&' : '?';
+    url += `limit=${encodeURIComponent(process.env.DPAL_UPSTREAM_REPORTS_LIMIT || '120')}`;
+  }
+
+  const headers = { Accept: 'application/json' };
+  const auth = process.env.DPAL_UPSTREAM_AUTH_HEADER;
+  if (auth) headers.Authorization = auth;
+
+  const res = await fetch(url, { headers });
+  if (!res.ok) return null;
+
+  const raw = await res.json();
+  let list = [];
+  if (Array.isArray(raw)) list = raw;
+  else if (raw?.ok === true && Array.isArray(raw.items)) list = raw.items;
+  else if (Array.isArray(raw.reports)) list = raw.reports;
+  else if (Array.isArray(raw.data)) list = raw.data;
+  else if (Array.isArray(raw.items)) list = raw.items;
+  else return null;
+
+  return list;
+}
+
+/**
+ * Full report document from main API (Mongo anchor). Enables verifier detail panel.
+ */
+export async function fetchUpstreamReportById(reportId) {
+  const base = process.env.DPAL_UPSTREAM_URL?.replace(/\/$/, '');
+  if (!base) return null;
+  const id = encodeURIComponent(String(reportId || '').trim());
+  if (!id) return null;
+  const headers = { Accept: 'application/json' };
+  const auth = process.env.DPAL_UPSTREAM_AUTH_HEADER;
+  if (auth) headers.Authorization = auth;
+  const res = await fetch(`${base}/api/reports/${id}`, { headers });
+  if (!res.ok) return null;
+  return res.json();
+}

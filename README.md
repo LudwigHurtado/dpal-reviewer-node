@@ -1,18 +1,17 @@
-# DPAL Validator / Review-Node System
+# DPAL Verifier Action Portal
 
-Premium enterprise **product concept** for DPAL: a **Validator / Review-Node Command Center** — trust, review, and accountability infrastructure for credentialed reviewers, legal and sector panels, regional truth-check teams, nonprofit partners, and senior QC.
+A **working verifier shell** (not a decorative dashboard): **live report queue** from your DPAL API, **report detail** with evidence, **verification notes**, **outbound action logging** (call / email / escalate / legal / follow-up), **audit timeline**, and **category playbooks** (environmental, housing, labor, public safety, medical).
 
-This is **not** a social moderation or generic voting UI. It communicates structured validation, auditable histories, wallet-linked credentials, chain-anchored proofs (conceptual), and operational intelligence for administrators, analysts, legal teams, and validators.
+Actions persist **locally** in `server/data/verifier-audit.json` until you map them to PostgreSQL/Mongo and real email/SMS/voice providers.
 
-**Docs for contributors & AI assistants:** [`CONTRIBUTING.md`](CONTRIBUTING.md) (setup and PRs) · [`AGENTS.md`](AGENTS.md) (agent instructions + progress log) · [`claude.md`](claude.md) (deep technical context, including related `dpal-front-end` notes).
+**Docs:** [`CONTRIBUTING.md`](CONTRIBUTING.md) · [`AGENTS.md`](AGENTS.md) · [`claude.md`](claude.md).
 
 ## What’s in this repo
 
-- React + Vite + TypeScript single-page dashboard
-- Deep blue / graphite / silver palette with muted gold accents
-- Sections: ecosystem roles, network map, report queues, escalations, reviewer performance, quality analytics, credentials, consensus tracker, conflict-of-interest alerts, regional coverage, category expertise, audit logs / chain proof samples, AI-assisted summary (advisory)
-
-With the API running, queues and analytics come from **`server/data/dashboard.json`** and optional **upstream** report feeds; bundled mock data is only a **fallback** if the API is unreachable.
+- React + Vite + TypeScript — `src/components/VerifierPortal.tsx`
+- Express reviewer API — `server/index.mjs` + `server/verifierRoutes.mjs`
+- Optional upstream: set **`DPAL_UPSTREAM_URL`** to your **`dpal-ai-server`** host and **`DPAL_UPSTREAM_REPORTS_PATH=/api/reports/feed`**
+- Demo rows in the UI if the feed is empty (training data only)
 
 ## Run locally
 

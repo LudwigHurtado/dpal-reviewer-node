@@ -6,11 +6,12 @@ This file is **handwritten project memory** for assistants: architecture, conven
 
 ---
 
-## Reviewer Node: live reports + situation chat (this repo)
+## Reviewer Node: Verifier Action Portal (this repo)
 
-- **Upstream queue:** Set **`DPAL_UPSTREAM_URL`** and **`DPAL_UPSTREAM_REPORTS_PATH=/api/reports/feed`** on the **reviewer API** (`server/index.mjs`) to pull the same Mongo-backed report list as **`dpal-ai-server`**. Default path in code is `/api/reports/feed` if env omits path.
-- **Near real-time dashboard:** **`GET /api/reviewer/v1/stream`** (SSE) pushes full dashboard JSON on an interval (**`REVIEWER_SSE_INTERVAL_MS`**, default 12s). The Vite app connects when **`VITE_REVIEWER_USE_SSE`** is not `false`; if SSE fails or is off, **`VITE_REVIEWER_POLL_MS`** polling refreshes the queue.
-- **Situation room proxy:** **`GET /api/reviewer/v1/situation/rooms`**, **`GET/POST …/situation/:roomId/messages`** forward to **`${DPAL_UPSTREAM_URL}/api/situation/...`**. UI: **Situation chat control** — list rooms, poll messages every 8s, post as **DPAL Review Node**. Requires upstream Mongo + same API the main app uses.
+- **UI:** `src/components/VerifierPortal.tsx` — live queue, report detail, verification tab, outbound actions, routing reference, audit timeline. No validator map, fake consensus, or global situation-room browser (report-scoped work only).
+- **Upstream:** **`DPAL_UPSTREAM_URL`** + **`DPAL_UPSTREAM_REPORTS_PATH=/api/reports/feed`**; detail via **`GET /api/reports/:id`** on the same host.
+- **Verifier REST:** **`/api/reviewer/v1/verifier`** — `GET /reports`, `GET /reports/:id`, `GET /reports/:id/timeline`, `POST` notes / verify / request-evidence / actions. Local audit file **`server/data/verifier-audit.json`** until DB tables exist.
+- **Legacy:** **`GET /api/reviewer/v1/dashboard`** and **SSE `/stream`** remain for older clients.
 
 ---
 
@@ -42,7 +43,7 @@ Front-end–specific URLs and env details are also in **`dpal-front-end/claude.m
 
 ## This repository (`DPAL Reviewer Node`)
 
-**Purpose:** Validator / Review-Node **command center** — React + Vite + TypeScript SPA backed by a small **Express** API. Not generic social moderation; focused on structured validation, queues, credentials, audit-style UX (see `README.md`).
+**Purpose:** **Verifier Action Portal** — React + Vite + TypeScript SPA and a small **Express** API for real report queues, verification, outbound action audit logs, and category playbooks (see `README.md`).
 
 **GitHub:** `LudwigHurtado/dpal-reviewer-node` (use **`gh`** for GitHub operations when available; **`git`** for local history).
 
@@ -50,20 +51,22 @@ Front-end–specific URLs and env details are also in **`dpal-front-end/claude.m
 
 - `npm install`
 - **`npm run dev:all`** — runs API (`node server/index.mjs`, default port **8787**) and Vite together via `concurrently`.
-- UI-only or mock: `npm run dev` with `VITE_USE_MOCK_DATA=true` if configured.
+- UI without upstream: the portal shows **demo** queue rows until **`DPAL_UPSTREAM_URL`** is set on the API.
 
 **API / data**
 
-- `server/index.mjs` — Express entry.
-- `server/data/dashboard.json` — primary dashboard payload; replace or pipeline-sync for real data.
-- `server/lib/upstream.mjs` — optional **`DPAL_UPSTREAM_*`** env merge of reports from a main DPAL backend (see `.env.example`).
+- `server/index.mjs` — Express entry (legacy dashboard + **verifier** routes).
+- `server/verifierRoutes.mjs` — **`/api/reviewer/v1/verifier/*`** (queue, detail, actions, timeline).
+- `server/data/verifier-audit.json` — created at runtime for notes + action audit log.
+- `server/data/dashboard.json` — legacy payload for **`GET /api/reviewer/v1/dashboard`** only.
+- `server/lib/upstream.mjs` — **`DPAL_UPSTREAM_*`** feed + **`GET /api/reports/:id`** for detail.
 - Vite proxies **`/api`** → `http://127.0.0.1:8787` in dev (`vite.config.ts`); override with **`VITE_DEV_API_PROXY_TARGET`**.
-- Typical endpoints: `GET /api/reviewer/v1/dashboard`, `reports`, `health` (confirm in `server/index.mjs`).
+- Typical endpoints: **`GET /api/reviewer/v1/verifier/reports`**, **`GET /api/reviewer/v1/health`**.
 
 **Frontend (this repo)**
 
-- `src/App.tsx`, `src/api/client.ts`, `src/hooks/useReviewerDashboard.ts`, `src/types/reviewer.ts`.
-- Static deploy (e.g. Vercel): no `/api` unless you host the Express app elsewhere and set **`VITE_API_BASE_URL`** to that origin’s API base.
+- `src/App.tsx` → **`VerifierPortal`**, `src/api/verifierClient.ts`, `src/verifier/*`.
+- Static deploy (e.g. Vercel): set **`VITE_API_BASE_URL`** to your hosted reviewer API origin + `/api`.
 
 **Windows**
 
