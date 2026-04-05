@@ -81,9 +81,9 @@ Main **public** DPAL shell: many “views” driven by `currentView` in `App.tsx
 
 ## `dpal-ai-server` — main Railway API (not this repo)
 
-**Canonical source of truth:** **[LudwigHurtado/dpal-ai-server](https://github.com/LudwigHurtado/dpal-ai-server)** on GitHub. Railway should deploy **from that repo’s `main` branch**, not from this Reviewer Node workspace.
+**Canonical source of truth:** **[LudwigHurtado/dpal-ai-server](https://github.com/LudwigHurtado/dpal-ai-server)** on GitHub. Railway deploys from that repo’s **`main`** branch.
 
-**Local clone (optional):** `C:\DPAL Reviewer Node\dpal-ai-server` is a normal **`git clone`** of that URL (`origin` = same repo). It is **not** a different backend—just a folder where you edit and **`git push origin main`**. This parent repo **ignores** `dpal-ai-server/` (see root `.gitignore`) so the backend is never accidentally committed here.
+**Where to work locally:** use a **single** clone at **`C:\dpal-ai-server`** (or any path), **`git pull` / `git push`** only there. Do **not** maintain a second copy under `DPAL Reviewer Node\dpal-ai-server` for real edits—that nested folder was a historical duplicate and is easy to confuse with the canonical clone. This parent repo **ignores** `dpal-ai-server/` (see root `.gitignore`).
 
 **Typical production URL:** `https://web-production-a27b.up.railway.app` (same host the front end targets with **`VITE_API_BASE`**).
 
