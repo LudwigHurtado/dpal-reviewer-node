@@ -24,7 +24,7 @@ import {
   opsStatusForDisposition,
   reporterLineForDisposition,
 } from './lib/verifierUpstreamSync.mjs';
-import { sendEmailIfConfigured } from './lib/verifierEmail.mjs';
+import { sendVerifierEmail, getEmailConfigStatus } from './lib/verifierEmail.mjs';
 import { runVerifierAiTriage, generateCallScript } from './lib/verifierAiTriage.mjs';
 
 const DISPOSITIONS = new Set([
@@ -48,6 +48,11 @@ function syncDispositionUpstream(reportId, disposition, performedBy, extraNote =
 
 export function createVerifierPortalRouter() {
   const router = Router();
+
+  /** Which email providers are configured (no secrets). */
+  router.get('/email/status', (_req, res) => {
+    res.json({ ok: true, ...getEmailConfigStatus() });
+  });
 
   router.get('/reports', async (_req, res) => {
     try {
@@ -401,23 +406,28 @@ export function createVerifierPortalRouter() {
         sent_to: to,
       });
 
-      let delivery = { sent: false };
+      let delivery = { sent: false, reason: to ? undefined : 'no_recipient' };
       let actionOut = entry;
       if (to) {
-        delivery = await sendEmailIfConfigured({
+        delivery = await sendVerifierEmail({
           to,
           subject,
           html: html || String(b.message || ''),
-          text: b.message,
+          text: b.message ? String(b.message) : undefined,
         });
         if (delivery.sent) {
           const u = updateActionEntry(entry.id, {
             sent_at: new Date().toISOString(),
-            delivery_provider: 'resend',
+            delivery_provider: delivery.provider,
             delivery_id: delivery.id,
             status: 'sent',
           });
           if (u) actionOut = u;
+        } else {
+          updateActionEntry(entry.id, {
+            status: 'send_failed',
+            send_error: delivery.error || delivery.reason || delivery.attempts,
+          });
         }
       }
 
@@ -425,7 +435,9 @@ export function createVerifierPortalRouter() {
         ok: true,
         action: actionOut,
         delivery,
-        hint: delivery.sent ? undefined : 'Set RESEND_API_KEY and VERIFIER_FROM_EMAIL to send real email.',
+        hint: delivery.sent
+          ? undefined
+          : 'Configure email: RESEND_API_KEY+VERIFIER_FROM_EMAIL, or SENDGRID_API_KEY+VERIFIER_FROM_EMAIL, or SMTP_HOST+SMTP_USER+SMTP_PASS. Test Resend with VERIFIER_FROM_EMAIL=onboarding@resend.dev and send only to your account email.',
       });
     } catch (e) {
       return res.status(500).json({ ok: false, error: String(e?.message || e) });
@@ -475,7 +487,7 @@ export function createVerifierPortalRouter() {
     }
   });
 
-  router.post('/reports/:reportId/actions/escalate', (req, res) => {
+  router.post('/reports/:reportId/actions/escalate', async (req, res) => {
     try {
       const reportId = decodeURIComponent(req.params.reportId || '').trim();
       const who = getVerifierIdentity(req);
@@ -484,6 +496,7 @@ export function createVerifierPortalRouter() {
         actionType: 'escalate',
         label: 'Escalation',
         destination_name: b.destination_name,
+        destination_email: b.destination_email,
         summary: b.message || b.summary || '',
         performed_by: who,
         recorded_at: new Date().toISOString(),
@@ -499,13 +512,36 @@ export function createVerifierPortalRouter() {
         { label: 'Escalated', detail: '' },
       );
       const upstream = syncDispositionUpstream(reportId, 'escalated', who, b.message || '');
-      return res.json({ ok: true, action: entry, upstream });
+
+      let delivery = null;
+      const to = b.destination_email || b.to;
+      const msg = String(b.message || b.summary || '');
+      if (to && msg) {
+        delivery = await sendVerifierEmail({
+          to,
+          subject: b.subject || `DPAL escalation — ${reportId}`,
+          html: `<p><strong>Escalation</strong> (${who})</p><pre>${msg.replace(/</g, '&lt;')}</pre>`,
+          text: msg,
+        });
+        if (delivery.sent) {
+          updateActionEntry(entry.id, {
+            sent_at: new Date().toISOString(),
+            delivery_provider: delivery.provider,
+            delivery_id: delivery.id,
+            status: 'sent',
+          });
+        } else {
+          updateActionEntry(entry.id, { status: 'send_failed', send_error: delivery.error || delivery.reason });
+        }
+      }
+
+      return res.json({ ok: true, action: entry, upstream, delivery });
     } catch (e) {
       return res.status(500).json({ ok: false, error: String(e?.message || e) });
     }
   });
 
-  router.post('/reports/:reportId/actions/escalate-emergency', (req, res) => {
+  router.post('/reports/:reportId/actions/escalate-emergency', async (req, res) => {
     try {
       const reportId = decodeURIComponent(req.params.reportId || '').trim();
       const who = getVerifierIdentity(req);
@@ -516,6 +552,7 @@ export function createVerifierPortalRouter() {
         summary: b.message || b.summary || '',
         destination_phone: b.destination_phone,
         destination_name: b.destination_name,
+        destination_email: b.destination_email,
         performed_by: who,
         recorded_at: new Date().toISOString(),
       });
@@ -530,13 +567,36 @@ export function createVerifierPortalRouter() {
         { label: 'Emergency escalation', detail: '' },
       );
       const upstream = patchUpstreamOpsStatus(reportId, 'Investigating', `[EMERGENCY] ${b.message || 'Escalated'} (${who})`);
-      return res.json({ ok: true, action: entry, upstream });
+
+      let delivery = null;
+      const to = b.destination_email || b.to;
+      const msg = String(b.message || b.summary || '');
+      if (to && msg) {
+        delivery = await sendVerifierEmail({
+          to,
+          subject: b.subject || `URGENT — DPAL report ${reportId}`,
+          html: `<p><strong>EMERGENCY ESCALATION</strong> (${who})</p><p>${b.destination_phone ? `Phone: ${b.destination_phone}<br/>` : ''}</p><pre>${msg.replace(/</g, '&lt;')}</pre>`,
+          text: msg,
+        });
+        if (delivery.sent) {
+          updateActionEntry(entry.id, {
+            sent_at: new Date().toISOString(),
+            delivery_provider: delivery.provider,
+            delivery_id: delivery.id,
+            status: 'sent',
+          });
+        } else {
+          updateActionEntry(entry.id, { status: 'send_failed', send_error: delivery.error || delivery.reason });
+        }
+      }
+
+      return res.json({ ok: true, action: entry, upstream, delivery });
     } catch (e) {
       return res.status(500).json({ ok: false, error: String(e?.message || e) });
     }
   });
 
-  router.post('/reports/:reportId/actions/legal-referral', (req, res) => {
+  router.post('/reports/:reportId/actions/legal-referral', async (req, res) => {
     try {
       const reportId = decodeURIComponent(req.params.reportId || '').trim();
       const who = getVerifierIdentity(req);
@@ -550,13 +610,32 @@ export function createVerifierPortalRouter() {
         performed_by: who,
         recorded_at: new Date().toISOString(),
       });
-      return res.json({ ok: true, action: entry });
+      const to = b.destination_email;
+      const msg = String(b.message || b.summary || '');
+      let delivery = null;
+      if (to && msg) {
+        delivery = await sendVerifierEmail({
+          to,
+          subject: b.subject || `Legal referral — ${reportId}`,
+          html: `<p>Legal referral (${who})</p><pre>${msg.replace(/</g, '&lt;')}</pre>`,
+          text: msg,
+        });
+        if (delivery.sent) {
+          updateActionEntry(entry.id, {
+            sent_at: new Date().toISOString(),
+            delivery_provider: delivery.provider,
+            delivery_id: delivery.id,
+            status: 'sent',
+          });
+        }
+      }
+      return res.json({ ok: true, action: entry, delivery });
     } catch (e) {
       return res.status(500).json({ ok: false, error: String(e?.message || e) });
     }
   });
 
-  router.post('/reports/:reportId/actions/nonprofit-referral', (req, res) => {
+  router.post('/reports/:reportId/actions/nonprofit-referral', async (req, res) => {
     try {
       const reportId = decodeURIComponent(req.params.reportId || '').trim();
       const who = getVerifierIdentity(req);
@@ -571,7 +650,26 @@ export function createVerifierPortalRouter() {
         performed_by: who,
         recorded_at: new Date().toISOString(),
       });
-      return res.json({ ok: true, action: entry });
+      const to = b.destination_email;
+      const msg = String(b.message || b.summary || '');
+      let delivery = null;
+      if (to && msg) {
+        delivery = await sendVerifierEmail({
+          to,
+          subject: b.subject || `Nonprofit referral — ${reportId}`,
+          html: `<p>Nonprofit referral (${who})</p><pre>${msg.replace(/</g, '&lt;')}</pre>`,
+          text: msg,
+        });
+        if (delivery.sent) {
+          updateActionEntry(entry.id, {
+            sent_at: new Date().toISOString(),
+            delivery_provider: delivery.provider,
+            delivery_id: delivery.id,
+            status: 'sent',
+          });
+        }
+      }
+      return res.json({ ok: true, action: entry, delivery });
     } catch (e) {
       return res.status(500).json({ ok: false, error: String(e?.message || e) });
     }
@@ -634,10 +732,11 @@ export function createVerifierPortalRouter() {
       });
       let delivery = { sent: false };
       if (b.reporter_email && b.message) {
-        delivery = await sendEmailIfConfigured({
+        delivery = await sendVerifierEmail({
           to: b.reporter_email,
           subject: b.subject || `Update on your report (${reportId})`,
           html: `<p>${String(b.message).replace(/</g, '&lt;')}</p>`,
+          text: String(b.message || ''),
         });
         if (delivery.sent) {
           updateActionEntry(entry.id, { sent_at: new Date().toISOString(), status: 'sent' });

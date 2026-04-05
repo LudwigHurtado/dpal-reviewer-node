@@ -154,6 +154,8 @@ export function VerifierPortal() {
   const [notes, setNotes] = useState('');
   const [actionType, setActionType] = useState('call');
   const [actionMessage, setActionMessage] = useState('');
+  /** Required for real email delivery (API has no recipient otherwise). */
+  const [outboundEmail, setOutboundEmail] = useState('');
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -395,12 +397,14 @@ export function VerifierPortal() {
         actionType === 'email_city'
           ? 'email'
           : actionType === 'emergency_dispatch'
-            ? 'escalate'
+            ? 'escalate-emergency'
             : actionType === 'legal_referral'
               ? 'legal-referral'
               : actionType === 'assign_followup'
                 ? 'assign-followup'
-                : 'call';
+                : actionType === 'non_emergency'
+                  ? 'call'
+                  : 'call';
       if (useDemo) {
         setNotice('Demo mode — action not sent. Configure upstream + mail/call providers for production.');
       } else {
@@ -408,8 +412,22 @@ export function VerifierPortal() {
           message: actionMessage,
           summary: actionMessage,
           destination_name: playbook?.agencies[0],
+          destination_email: outboundEmail.trim() || undefined,
+          subject: `DPAL verifier — ${selected?.title?.slice(0, 80) || 'Report'} (${selectedId})`,
         });
-        setNotice(res.warning || 'Action logged in verifier audit file.');
+        const d = res.delivery as { sent?: boolean; provider?: string; reason?: string; error?: unknown } | undefined;
+        if (d?.sent) {
+          setNotice(`Email sent via ${d.provider || 'mail'}.`);
+        } else if (kind === 'email' || kind === 'escalate-emergency' || kind === 'legal-referral') {
+          const detail = d?.reason || (d?.error != null ? JSON.stringify(d.error) : '') || 'unknown';
+          setNotice(
+            outboundEmail.trim()
+              ? `Email not delivered (${detail}). ${res.hint || 'Set RESEND_API_KEY, SENDGRID_API_KEY, or SMTP_* on the Reviewer API.'}`
+              : 'Enter a recipient email above — the server cannot send without a To: address.',
+          );
+        } else {
+          setNotice(res.warning || res.hint || 'Action logged in verifier audit file.');
+        }
         await loadDetail(selectedId);
       }
     } catch (e: unknown) {
@@ -986,6 +1004,25 @@ export function VerifierPortal() {
                             <option value="legal_referral">Legal referral</option>
                             <option value="assign_followup">Assign follow-up</option>
                           </select>
+                          <label style={{ display: 'block', marginTop: '0.65rem', fontSize: '0.75rem', color: 'var(--silver-dim)' }}>
+                            Recipient email (required to actually send email — escalation / legal / city)
+                            <input
+                              type="email"
+                              value={outboundEmail}
+                              onChange={(e) => setOutboundEmail(e.target.value)}
+                              placeholder="agency@city.gov"
+                              autoComplete="email"
+                              style={{
+                                width: '100%',
+                                marginTop: '0.3rem',
+                                padding: '0.45rem',
+                                background: 'var(--bg-deep)',
+                                border: '1px solid var(--graphite-border)',
+                                color: 'var(--white)',
+                                borderRadius: '6px',
+                              }}
+                            />
+                          </label>
                           <div className="section-title" style={{ marginTop: '0.75rem' }}>
                             Suggested contacts
                           </div>

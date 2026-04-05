@@ -14,6 +14,7 @@ dotenv.config({ path: join(projectRoot, '.env.local'), override: true });
 import { fetchUpstreamReports, buildPublicReportUrl } from './lib/upstream.mjs';
 import { readReviews, upsertReview, ALLOWED_EFFECTS } from './lib/reviewsStore.mjs';
 import { createVerifierPortalRouter } from './verifierRoutes.mjs';
+import { getEmailConfigStatus } from './lib/verifierEmail.mjs';
 
 const DATA_FILE = join(__dirname, 'data', 'dashboard.json');
 
@@ -175,6 +176,7 @@ app.get('/api/reviewer/v1/health', (_req, res) => {
     upstream: Boolean(upstreamBase()),
     sseMs: SSE_INTERVAL_MS,
     verifierPortal: true,
+    email: getEmailConfigStatus(),
   });
 });
 

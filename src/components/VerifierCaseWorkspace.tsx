@@ -329,13 +329,23 @@ export function VerifierCaseWorkspace(props: {
               disabled={busy}
               onClick={() =>
                 void run(async () => {
-                  await postOutboundAction(reportId, 'email', {
-                    destination_email: emailTo,
+                  if (!emailTo.trim()) {
+                    setNotice('Enter a recipient email address.');
+                    return;
+                  }
+                  const res = await postOutboundAction(reportId, 'email', {
+                    destination_email: emailTo.trim(),
                     subject: emailSubj || `Report ${reportId}`,
                     message: emailBody,
                     html: `<p>${emailBody.replace(/</g, '&lt;')}</p>`,
                   });
-                  setNotice('Email logged; sent via Resend when API keys are set.');
+                  const d = res.delivery as { sent?: boolean; provider?: string; reason?: string; error?: unknown } | undefined;
+                  if (d?.sent) {
+                    setNotice(`Email sent via ${d.provider || 'mail'}.`);
+                  } else {
+                    const detail = d?.reason || (d?.error != null ? JSON.stringify(d.error) : 'no provider');
+                    setNotice(`Not sent (${detail}). ${res.hint || 'Configure RESEND, SendGrid, or SMTP on the Reviewer API.'}`);
+                  }
                 })
               }
             >
