@@ -6,6 +6,40 @@ This file is **handwritten project memory** for assistants: architecture, conven
 
 ---
 
+## Reviewer Node: live reports + situation chat (this repo)
+
+- **Upstream queue:** Set **`DPAL_UPSTREAM_URL`** and **`DPAL_UPSTREAM_REPORTS_PATH=/api/reports/feed`** on the **reviewer API** (`server/index.mjs`) to pull the same Mongo-backed report list as **`dpal-ai-server`**. Default path in code is `/api/reports/feed` if env omits path.
+- **Near real-time dashboard:** **`GET /api/reviewer/v1/stream`** (SSE) pushes full dashboard JSON on an interval (**`REVIEWER_SSE_INTERVAL_MS`**, default 12s). The Vite app connects when **`VITE_REVIEWER_USE_SSE`** is not `false`; if SSE fails or is off, **`VITE_REVIEWER_POLL_MS`** polling refreshes the queue.
+- **Situation room proxy:** **`GET /api/reviewer/v1/situation/rooms`**, **`GET/POST …/situation/:roomId/messages`** forward to **`${DPAL_UPSTREAM_URL}/api/situation/...`**. UI: **Situation chat control** — list rooms, poll messages every 8s, post as **DPAL Review Node**. Requires upstream Mongo + same API the main app uses.
+
+---
+
+## Accounts, login, and where user names live (cross-repo)
+
+This workspace does **not** host the main account system by itself. **Login UI** and **MongoDB-backed users** were added in:
+
+| Piece | Repo | Role |
+|--------|------|------|
+| Sign-in / sign-up pages, session in the browser | **`dpal-front-end`** | `AppBootstrap.tsx` registers routes **before** the main `App` catch-all. |
+| REST auth + `User` documents | **`dpal-ai-server`** | Express routes under **`/api/auth/*`**, admin **`/api/admin/*`**, Mongoose **`User`** model. |
+
+**Already implemented**
+
+- **Login screen:** open **`/login`** on the front-end app (e.g. local dev: `http://localhost:3000/login` with Vite’s configured port). Users sign in with **email or username** + password (`pages/auth/LoginPage.tsx`).
+- **Registration:** **`/signup`** creates accounts; new users are stored in MongoDB (pending verification unless bootstrapped as admin — see below).
+- **Database:** User **display name** and identifiers are stored in the **`users`** collection (Mongoose model **`User`**): **`fullName`** (required), **`username`**, **`email`**, plus **`role`**, **`status`**, **`emailVerified`**, **`lastLoginAt`**, etc. Passwords are **`passwordHash`** (not returned by API).
+- **Seeing multiple users:** After logging in as an **admin**, **`/admin`** loads a paginated **Users** tab (`adminListUsers`) backed by **`GET /api/admin/users`** — names and roles appear there. Non-admins do not get a global user directory; they only see their own session via **`/account`** and **`/api/auth/me`**.
+
+**Ops notes**
+
+- **`BOOTSTRAP_ADMIN_EMAIL`** (on **`dpal-ai-server`**): if set, the **first signup** whose email matches (case-insensitive) gets **`admin`**, **`active`**, and **`emailVerified: true`** without waiting for email verification — useful to create the first operator account.
+- **`JWT_SECRET`** (32+ characters) is **required in production** for access tokens; optional dev placeholder otherwise (`src/auth/tokens.ts`).
+- Front-end must call the API that implements auth: set **`VITE_API_BASE`** to your **`dpal-ai-server`** origin (same host that mounts **`auth.routes.ts`** and **`admin.users.routes.ts`**). **`MONGODB_URI`** must be set on the server or registration/login returns **`database_unavailable`**.
+
+Front-end–specific URLs and env details are also in **`dpal-front-end/claude.md`**.
+
+---
+
 ## This repository (`DPAL Reviewer Node`)
 
 **Purpose:** Validator / Review-Node **command center** — React + Vite + TypeScript SPA backed by a small **Express** API. Not generic social moderation; focused on structured validation, queues, credentials, audit-style UX (see `README.md`).
@@ -138,7 +172,7 @@ This is the **Mongo-backed** Node/Express service (`src/index.ts`). **Do not con
 
 ## What to add next
 
-When you ship new env vars, API routes, or cross-repo contracts, append short bullets here or in **`AGENTS.md`** so the next session does not rediscover them from scratch.
+When you ship new env vars, API routes, or cross-repo contracts, append short bullets here or in **`AGENTS.md`** so the next session does not rediscover them from scratch. If auth or **`User`** schema changes, sync the **Accounts, login, and where user names live** section above and **`dpal-front-end/claude.md`**.
 
 ---
 

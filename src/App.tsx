@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { clsx } from 'clsx';
 import { ValidatorNetworkMap } from './components/ValidatorNetworkMap';
 import { QueueReportReviewPanel } from './components/QueueReportReviewPanel';
+import { SituationChatMonitor } from './components/SituationChatMonitor';
 import { useReviewerDashboard } from './hooks/useReviewerDashboard';
 import { resolvePublicReportUrl } from './utils/reportLinks';
 
@@ -9,6 +10,7 @@ const navItems = [
   { id: 'overview', label: 'Command overview' },
   { id: 'queues', label: 'Review queues' },
   { id: 'report-review', label: 'Opinions & effects' },
+  { id: 'situation-chat', label: 'Situation chat control' },
   { id: 'validators', label: 'Validator network' },
   { id: 'trust', label: 'Trust & credentials' },
   { id: 'audit', label: 'Audit & chain proofs' },
@@ -22,7 +24,7 @@ function truncate(s: string, max: number) {
 export function App() {
   const [activeNav, setActiveNav] = useState('overview');
   const [stubNotice, setStubNotice] = useState<string | null>(null);
-  const { data, loading, error, hadApiFailure, refresh } = useReviewerDashboard();
+  const { data, loading, error, hadApiFailure, refresh, liveMode } = useReviewerDashboard();
   const useMock = import.meta.env.VITE_USE_MOCK_DATA === 'true';
 
   if (!data) {
@@ -97,6 +99,14 @@ export function App() {
             <h2>Review-Node Command Center</h2>
             <div className="top-bar-meta">
               Session · UTC {new Date().toISOString().slice(0, 16).replace('T', ' ')} · Audit logging on
+              {!useMock && (
+                <span style={{ marginLeft: '0.75rem' }}>
+                  · Queue sync:{' '}
+                  <strong style={{ color: liveMode === 'sse' ? '#86efac' : liveMode === 'poll' ? '#fcd34d' : '#94a3b8' }}>
+                    {liveMode === 'sse' ? 'live (SSE)' : liveMode === 'poll' ? 'polling' : 'static'}
+                  </strong>
+                </span>
+              )}
             </div>
             {(loading || hadApiFailure) && (
               <div className="top-bar-meta" style={{ marginTop: '0.5rem' }}>
@@ -301,6 +311,22 @@ export function App() {
                   readOnly={useMock}
                   onSaved={() => refresh()}
                 />
+              </div>
+            </div>
+
+            <div id="sec-situation-chat" className="panel span-12">
+              <div className="panel-header">
+                <h3>Situation room oversight</h3>
+                <span className="badge">Real-time chat</span>
+              </div>
+              <div className="panel-body">
+                <p className="text-muted" style={{ marginTop: 0, marginBottom: '1rem', fontSize: '0.8rem', lineHeight: 1.55 }}>
+                  The reviewer API proxies to your main DPAL backend (<span className="mono">GET/POST /api/situation/…</span>).
+                  Set <span className="mono">DPAL_UPSTREAM_URL</span> on the API server to the same host as production (e.g. Railway{' '}
+                  <span className="mono">dpal-ai-server</span>). You can read transcripts and post as <strong>DPAL Review Node</strong> to
+                  steer conversations and flag issues.
+                </p>
+                <SituationChatMonitor readOnly={useMock} />
               </div>
             </div>
 

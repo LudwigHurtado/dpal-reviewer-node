@@ -44,3 +44,48 @@ export async function postReportReview(
   }
   return res.json() as Promise<{ ok: boolean; reportId: string; review: ReportReviewEntry }>;
 }
+
+/** Situation rooms from main DPAL API (proxied through reviewer API). */
+export async function fetchSituationRooms(): Promise<unknown> {
+  const url = `${baseUrl()}/reviewer/v1/situation/rooms`;
+  const res = await fetch(url, { headers: bearerHeaders() });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Situation rooms ${res.status}: ${text || res.statusText}`);
+  }
+  return res.json();
+}
+
+export async function fetchSituationMessages(roomId: string, limit = 150): Promise<unknown> {
+  const id = encodeURIComponent(roomId);
+  const url = `${baseUrl()}/reviewer/v1/situation/${id}/messages?limit=${encodeURIComponent(String(limit))}`;
+  const res = await fetch(url, { headers: bearerHeaders() });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Messages ${res.status}: ${text || res.statusText}`);
+  }
+  return res.json();
+}
+
+export async function postSituationMessage(
+  roomId: string,
+  body: { sender?: string; text: string; imageUrl?: string; audioUrl?: string; isSystem?: boolean },
+): Promise<unknown> {
+  const id = encodeURIComponent(roomId);
+  const url = `${baseUrl()}/reviewer/v1/situation/${id}/messages`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: jsonPostHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Send message ${res.status}: ${text || res.statusText}`);
+  }
+  return res.json();
+}
+
+/** Stream URL for SSE dashboard updates (same-origin /api). */
+export function reviewerStreamUrl(): string {
+  return `${baseUrl()}/reviewer/v1/stream`;
+}

@@ -11,6 +11,10 @@ interface ImportMetaEnv {
    * (e.g. `https://your-dpal-app.vercel.app` — link becomes `/?reportId=…`).
    */
   readonly VITE_DPAL_PUBLIC_WEB_URL: string | undefined;
+  /** When not `false`, connect to `/api/reviewer/v1/stream` for live queue updates (SSE). */
+  readonly VITE_REVIEWER_USE_SSE: string | undefined;
+  /** Poll interval in ms when SSE is off or failed (default 15000). */
+  readonly VITE_REVIEWER_POLL_MS: string | undefined;
 }
 
 interface ImportMeta {

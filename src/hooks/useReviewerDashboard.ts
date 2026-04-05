@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { fetchDashboard } from '../api/client';
+import { useCallback, useEffect, useState } from 'react';
+import { fetchDashboard, reviewerStreamUrl } from '../api/client';
 import type { ReviewerDashboard } from '../types/reviewer';
 import {
   aiSummary as mockAi,
@@ -43,7 +43,11 @@ export function useReviewerDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [sseFailed, setSseFailed] = useState(false);
   const useMock = import.meta.env.VITE_USE_MOCK_DATA === 'true';
+  const sseEnabled = import.meta.env.VITE_REVIEWER_USE_SSE !== 'false';
+
+  const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
 
   useEffect(() => {
     if (useMock) {
@@ -77,7 +81,52 @@ export function useReviewerDashboard() {
     };
   }, [useMock, refreshKey]);
 
-  const refresh = () => setRefreshKey((k) => k + 1);
+  useEffect(() => {
+    if (useMock || !sseEnabled) return;
 
-  return { data, loading, error, hadApiFailure: Boolean(error) && !useMock, refresh };
+    const es = new EventSource(reviewerStreamUrl());
+    es.onmessage = (ev) => {
+      try {
+        const msg = JSON.parse(ev.data) as { dashboard?: ReviewerDashboard };
+        if (msg?.dashboard) setData(msg.dashboard);
+      } catch {
+        /* ignore */
+      }
+    };
+    es.onerror = () => {
+      setSseFailed(true);
+      es.close();
+    };
+
+    return () => {
+      es.close();
+    };
+  }, [useMock, sseEnabled]);
+
+  /** HTTP polling when SSE is turned off or the EventSource connection failed. */
+  useEffect(() => {
+    if (useMock) return;
+    if (sseEnabled && !sseFailed) return;
+
+    const pollMs = Number(import.meta.env.VITE_REVIEWER_POLL_MS || 15000);
+    if (!Number.isFinite(pollMs) || pollMs <= 0) return;
+
+    const id = window.setInterval(() => refresh(), pollMs);
+    return () => window.clearInterval(id);
+  }, [useMock, sseEnabled, sseFailed, refresh]);
+
+  const liveMode: 'off' | 'sse' | 'poll' = useMock
+    ? 'off'
+    : sseEnabled && !sseFailed
+      ? 'sse'
+      : 'poll';
+
+  return {
+    data,
+    loading,
+    error,
+    hadApiFailure: Boolean(error) && !useMock,
+    refresh,
+    liveMode,
+  };
 }

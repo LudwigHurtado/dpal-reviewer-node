@@ -10,6 +10,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const DATA_FILE = join(__dirname, 'data', 'dashboard.json');
 
 const PORT = Number(process.env.REVIEWER_API_PORT || process.env.PORT || 8787);
+const SSE_INTERVAL_MS = Number(process.env.REVIEWER_SSE_INTERVAL_MS || 12000);
 
 function readLocalDashboard() {
   const text = fs.readFileSync(DATA_FILE, 'utf8');
@@ -35,6 +36,50 @@ function enrichQueueRows(rows) {
   });
 }
 
+async function computeDashboardPayload() {
+  const dashboard = cloneDashboard(readLocalDashboard());
+  const upstream = await fetchUpstreamReports();
+  if (upstream && upstream.length > 0) {
+    dashboard.queueRows = enrichQueueRows(upstream);
+    dashboard._sources = { queueRows: 'upstream', upstream: true };
+  } else {
+    dashboard.queueRows = enrichQueueRows(dashboard.queueRows || []);
+    dashboard._sources = { queueRows: 'local', upstream: false };
+  }
+  return dashboard;
+}
+
+function upstreamBase() {
+  return process.env.DPAL_UPSTREAM_URL?.replace(/\/$/, '') || '';
+}
+
+async function proxyUpstreamJson(method, upstreamPath, body) {
+  const base = upstreamBase();
+  if (!base) {
+    return { status: 503, json: { ok: false, error: 'upstream_not_configured' } };
+  }
+  const url = `${base}${upstreamPath.startsWith('/') ? upstreamPath : `/${upstreamPath}`}`;
+  const headers = { Accept: 'application/json' };
+  const auth = process.env.DPAL_UPSTREAM_AUTH_HEADER;
+  if (auth) headers.Authorization = auth;
+  if (body != null) {
+    headers['Content-Type'] = 'application/json';
+  }
+  const res = await fetch(url, {
+    method,
+    headers,
+    body: body != null ? JSON.stringify(body) : undefined,
+  });
+  const text = await res.text();
+  let json;
+  try {
+    json = text ? JSON.parse(text) : {};
+  } catch {
+    json = { ok: false, raw: text.slice(0, 500) };
+  }
+  return { status: res.status, json };
+}
+
 const app = express();
 app.use(cors({ origin: true }));
 app.use(express.json({ limit: '2mb' }));
@@ -42,20 +87,36 @@ app.use(express.json({ limit: '2mb' }));
 /** Full dashboard payload (primary contract for the Review-Node UI). */
 app.get('/api/reviewer/v1/dashboard', async (_req, res) => {
   try {
-    const dashboard = cloneDashboard(readLocalDashboard());
-    const upstream = await fetchUpstreamReports();
-    if (upstream && upstream.length > 0) {
-      dashboard.queueRows = enrichQueueRows(upstream);
-      dashboard._sources = { queueRows: 'upstream', upstream: true };
-    } else {
-      dashboard.queueRows = enrichQueueRows(dashboard.queueRows || []);
-      dashboard._sources = { queueRows: 'local', upstream: false };
-    }
+    const dashboard = await computeDashboardPayload();
     res.json(dashboard);
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: 'Failed to load dashboard', detail: String(e?.message || e) });
   }
+});
+
+/** Server-Sent Events: push fresh dashboard JSON on connect and every SSE_INTERVAL_MS (near real-time queue). */
+app.get('/api/reviewer/v1/stream', async (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  if (typeof res.flushHeaders === 'function') res.flushHeaders();
+
+  const send = async () => {
+    try {
+      const dashboard = await computeDashboardPayload();
+      res.write(`data: ${JSON.stringify({ type: 'dashboard', dashboard })}\n\n`);
+    } catch (e) {
+      res.write(`event: error\ndata: ${JSON.stringify({ message: String(e?.message || e) })}\n\n`);
+    }
+  };
+
+  await send();
+  const iv = setInterval(send, SSE_INTERVAL_MS);
+  req.on('close', () => {
+    clearInterval(iv);
+  });
 });
 
 /** Report list only (for integrations / debugging). */
@@ -105,15 +166,70 @@ app.post('/api/reviewer/v1/reports/:reportId/review', (req, res) => {
   }
 });
 
+/**
+ * Proxy: list situation rooms on main DPAL API (Mongo-backed chat rooms).
+ * Requires DPAL_UPSTREAM_URL (same Railway / dpel-ai-server host).
+ */
+app.get('/api/reviewer/v1/situation/rooms', async (_req, res) => {
+  try {
+    const { status, json } = await proxyUpstreamJson('GET', '/api/situation/rooms');
+    return res.status(status).json(json);
+  } catch (e) {
+    console.error(e);
+    res.status(502).json({ ok: false, error: 'upstream_proxy_failed', detail: String(e?.message || e) });
+  }
+});
+
+/** Proxy: GET messages for a situation room (real-time polling from UI). */
+app.get('/api/reviewer/v1/situation/:roomId/messages', async (req, res) => {
+  try {
+    const roomId = encodeURIComponent(String(req.params.roomId || '').trim());
+    const lim = req.query.limit != null ? `?limit=${encodeURIComponent(String(req.query.limit))}` : '';
+    const { status, json } = await proxyUpstreamJson('GET', `/api/situation/${roomId}/messages${lim}`);
+    return res.status(status).json(json);
+  } catch (e) {
+    console.error(e);
+    res.status(502).json({ ok: false, error: 'upstream_proxy_failed', detail: String(e?.message || e) });
+  }
+});
+
+/**
+ * Proxy: POST a message as the review node (moderation / guidance).
+ * Body matches main API: { sender, text, imageUrl?, audioUrl?, isSystem? }
+ */
+app.post('/api/reviewer/v1/situation/:roomId/messages', async (req, res) => {
+  try {
+    const roomId = encodeURIComponent(String(req.params.roomId || '').trim());
+    const body = {
+      ...req.body,
+      sender: req.body?.sender || 'DPAL Review Node',
+    };
+    const { status, json } = await proxyUpstreamJson('POST', `/api/situation/${roomId}/messages`, body);
+    return res.status(status).json(json);
+  } catch (e) {
+    console.error(e);
+    res.status(502).json({ ok: false, error: 'upstream_proxy_failed', detail: String(e?.message || e) });
+  }
+});
+
 /** Health for load balancers / dev. */
 app.get('/api/reviewer/v1/health', (_req, res) => {
-  res.json({ ok: true, service: 'dpal-reviewer-api', version: '1' });
+  res.json({
+    ok: true,
+    service: 'dpal-reviewer-api',
+    version: '2',
+    upstream: Boolean(upstreamBase()),
+    sseMs: SSE_INTERVAL_MS,
+  });
 });
 
 const server = app.listen(PORT, () => {
   console.log(`DPAL reviewer API listening on http://127.0.0.1:${PORT}`);
   if (process.env.DPAL_UPSTREAM_URL) {
-    console.log(`  Upstream reports: ${process.env.DPAL_UPSTREAM_URL}${process.env.DPAL_UPSTREAM_REPORTS_PATH || '/api/v1/reports'}`);
+    console.log(
+      `  Upstream reports: ${process.env.DPAL_UPSTREAM_URL}${process.env.DPAL_UPSTREAM_REPORTS_PATH || '/api/reports/feed'}`,
+    );
+    console.log('  Situation chat proxy: /api/reviewer/v1/situation/* → /api/situation/*');
   }
   if (process.env.DPAL_PUBLIC_REPORT_BASE) {
     console.log(`  Public report links: ${process.env.DPAL_PUBLIC_REPORT_BASE} (?reportId=…)`);

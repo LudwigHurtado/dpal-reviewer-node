@@ -17,6 +17,11 @@ function pickStr(obj, keys, fallback = '') {
   return fallback;
 }
 
+/** True when path targets dpal-ai-server style feed. */
+function isFeedPath(path) {
+  return String(path || '').includes('/feed');
+}
+
 function pickNum(obj, keys, fallback = 0) {
   for (const k of keys) {
     const v = obj[k];
@@ -40,15 +45,15 @@ export function buildPublicReportUrl(reportId) {
 }
 
 export function mapUpstreamReport(r) {
-  const id = pickStr(r, ['id', 'report_id', 'uuid', 'public_id'], '');
+  const id = pickStr(r, ['id', 'report_id', 'reportId', 'uuid', 'public_id'], '');
   const title = pickStr(r, ['title', 'subject', 'name', 'headline'], 'Untitled report');
   const summary = pickStr(r, ['summary', 'description', 'body', 'details'], '');
   const category = pickStr(r, ['category', 'type', 'topic', 'sector'], 'General');
-  const stage = pickStr(r, ['stage', 'status', 'review_stage'], 'Triage');
+  const stage = pickStr(r, ['stage', 'status', 'review_stage', 'lifecycleState'], 'Triage');
   const assignee = pickStr(r, ['assignee', 'assigned_to', 'reviewer'], 'Unassigned');
   const sla = pickStr(r, ['sla', 'sla_window'], '—');
   const confidence = Math.min(100, Math.max(0, pickNum(r, ['confidence', 'score', 'confidence_pct'], 50)));
-  const submittedAt = pickStr(r, ['submittedAt', 'submitted_at', 'created_at', 'createdAt'], '');
+  const submittedAt = pickStr(r, ['submittedAt', 'submitted_at', 'created_at', 'createdAt', 'updatedAt', 'timestamp'], '');
   const location = pickStr(r, ['location', 'region', 'city'], '');
   const publicUrlRaw = pickStr(r, ['publicUrl', 'url', 'link', 'public_url', 'web_url'], '');
 
@@ -74,8 +79,15 @@ export async function fetchUpstreamReports() {
   const base = process.env.DPAL_UPSTREAM_URL?.replace(/\/$/, '');
   if (!base) return null;
 
-  const path = process.env.DPAL_UPSTREAM_REPORTS_PATH || '/api/v1/reports';
-  const url = `${base}${path.startsWith('/') ? path : `/${path}`}`;
+  let path = process.env.DPAL_UPSTREAM_REPORTS_PATH || '/api/reports/feed';
+  if (!path.startsWith('/')) path = `/${path}`;
+
+  let url = `${base}${path}`;
+  if (isFeedPath(path) && !/[?&]limit=/.test(url)) {
+    url += url.includes('?') ? '&' : '?';
+    url += `limit=${encodeURIComponent(process.env.DPAL_UPSTREAM_REPORTS_LIMIT || '120')}`;
+  }
+
   const headers = { Accept: 'application/json' };
   const auth = process.env.DPAL_UPSTREAM_AUTH_HEADER;
   if (auth) headers.Authorization = auth;
@@ -89,6 +101,7 @@ export async function fetchUpstreamReports() {
   const raw = await res.json();
   let list = [];
   if (Array.isArray(raw)) list = raw;
+  else if (raw?.ok === true && Array.isArray(raw.items)) list = raw.items;
   else if (Array.isArray(raw.reports)) list = raw.reports;
   else if (Array.isArray(raw.data)) list = raw.data;
   else if (Array.isArray(raw.items)) list = raw.items;
