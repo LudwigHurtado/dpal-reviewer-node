@@ -59,8 +59,17 @@ export interface VerifierDetailResponse {
 export interface VerifierQueueResponse {
   ok: boolean;
   reports: VerifierQueueRow[];
-  source?: string;
+  /** How the queue was loaded — drives demo vs empty vs live. */
+  source?:
+    | 'upstream'
+    | 'upstream_empty'
+    | 'unconfigured'
+    | 'upstream_error'
+    | 'empty'
+    | string;
   message?: string;
+  /** Non-secret hints (feed URL tested) for troubleshooting. */
+  debug?: { feedUrl?: string; httpStatus?: number };
 }
 
 export interface VerifierActionResponse {

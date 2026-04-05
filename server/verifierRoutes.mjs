@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import {
-  fetchUpstreamFeedRawList,
+  fetchUpstreamVerifierFeedResult,
   fetchUpstreamReportById,
   resolveUpstreamAssetUrl,
   collectImageUrlStringsFromReportShape,
@@ -21,12 +21,40 @@ export function createVerifierPortalRouter() {
   /** GET /reports — live queue */
   router.get('/reports', async (_req, res) => {
     try {
-      const rawList = await fetchUpstreamFeedRawList();
-      if (!rawList || rawList.length === 0) {
-        return res.json({ ok: true, reports: [], source: 'empty', message: 'No upstream feed. Set DPAL_UPSTREAM_URL or use the UI demo mode.' });
+      const result = await fetchUpstreamVerifierFeedResult();
+      if (result.source === 'upstream') {
+        const reports = result.rawList.map((raw) => toVerifierQueueRow(raw));
+        return res.json({
+          ok: true,
+          reports,
+          source: 'upstream',
+          debug: result.debug,
+        });
       }
-      const reports = rawList.map((raw) => toVerifierQueueRow(raw));
-      return res.json({ ok: true, reports, source: 'upstream' });
+      if (result.source === 'upstream_empty') {
+        return res.json({
+          ok: true,
+          reports: [],
+          source: 'upstream_empty',
+          message: result.message,
+          debug: result.debug,
+        });
+      }
+      if (result.source === 'unconfigured') {
+        return res.json({
+          ok: true,
+          reports: [],
+          source: 'unconfigured',
+          message: result.message,
+        });
+      }
+      return res.json({
+        ok: true,
+        reports: [],
+        source: 'upstream_error',
+        message: result.message,
+        debug: result.debug,
+      });
     } catch (e) {
       console.error(e);
       return res.status(500).json({ ok: false, error: String(e?.message || e) });

@@ -167,10 +167,20 @@ export async function fetchUpstreamReports() {
   return list.map(mapUpstreamReport);
 }
 
-/** Raw feed items (before mapUpstreamReport) for verifier evidence counts etc. */
-export async function fetchUpstreamFeedRawList() {
+/**
+ * Verifier feed: raw list + status so the UI can distinguish
+ * "not configured" vs "HTTP error" vs "empty feed" vs "ok".
+ */
+export async function fetchUpstreamVerifierFeedResult() {
   const base = process.env.DPAL_UPSTREAM_URL?.replace(/\/$/, '');
-  if (!base) return null;
+  if (!base) {
+    return {
+      source: 'unconfigured',
+      rawList: null,
+      message:
+        'DPAL_UPSTREAM_URL is not set on the Reviewer API process. Add it to .env / .env.local (or Railway env) and restart the API.',
+    };
+  }
 
   let path = process.env.DPAL_UPSTREAM_REPORTS_PATH || '/api/reports/feed';
   if (!path.startsWith('/')) path = `/${path}`;
@@ -185,19 +195,73 @@ export async function fetchUpstreamFeedRawList() {
   const auth = process.env.DPAL_UPSTREAM_AUTH_HEADER;
   if (auth) headers.Authorization = auth;
 
-  const res = await fetch(url, { headers });
-  if (!res.ok) return null;
+  let res;
+  try {
+    res = await fetch(url, { headers });
+  } catch (e) {
+    return {
+      source: 'upstream_error',
+      rawList: null,
+      message: `Network error calling upstream feed: ${String(e?.message || e)}`,
+      debug: { feedUrl: url },
+    };
+  }
 
-  const raw = await res.json();
+  if (!res.ok) {
+    return {
+      source: 'upstream_error',
+      rawList: null,
+      message: `Upstream returned ${res.status} ${res.statusText}. Check DPAL_UPSTREAM_URL and that the main API exposes GET ${path || '/api/reports/feed'}.`,
+      debug: { feedUrl: url, httpStatus: res.status },
+    };
+  }
+
+  let raw;
+  try {
+    raw = await res.json();
+  } catch (e) {
+    return {
+      source: 'upstream_error',
+      rawList: null,
+      message: 'Upstream response was not valid JSON.',
+      debug: { feedUrl: url },
+    };
+  }
+
   let list = [];
   if (Array.isArray(raw)) list = raw;
   else if (raw?.ok === true && Array.isArray(raw.items)) list = raw.items;
   else if (Array.isArray(raw.reports)) list = raw.reports;
   else if (Array.isArray(raw.data)) list = raw.data;
   else if (Array.isArray(raw.items)) list = raw.items;
-  else return null;
+  else {
+    return {
+      source: 'upstream_error',
+      rawList: null,
+      message:
+        'Feed JSON did not contain a recognizable array (reports, items, or data). See server/lib/upstream.mjs for supported shapes.',
+      debug: { feedUrl: url },
+    };
+  }
 
-  return list;
+  if (list.length === 0) {
+    return {
+      source: 'upstream_empty',
+      rawList: [],
+      message:
+        'Connected to upstream successfully, but the feed returned zero reports. POST filings to your main API, then refresh.',
+      debug: { feedUrl: url },
+    };
+  }
+
+  return { source: 'upstream', rawList: list, message: undefined, debug: { feedUrl: url } };
+}
+
+/** Raw feed items (before mapUpstreamReport) for verifier evidence counts etc. */
+export async function fetchUpstreamFeedRawList() {
+  const r = await fetchUpstreamVerifierFeedResult();
+  if (r.source !== 'upstream' && r.source !== 'upstream_empty') return null;
+  return r.rawList;
 }
 
 /**

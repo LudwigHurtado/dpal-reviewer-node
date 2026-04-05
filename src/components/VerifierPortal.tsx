@@ -66,6 +66,7 @@ export function VerifierPortal() {
   const [useDemo, setUseDemo] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadErr, setLoadErr] = useState<string | null>(null);
+  const [feedDebug, setFeedDebug] = useState<{ feedUrl?: string; httpStatus?: number } | null>(null);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -88,20 +89,30 @@ export function VerifierPortal() {
   const loadQueue = useCallback(async () => {
     setLoading(true);
     setLoadErr(null);
+    setFeedDebug(null);
     try {
       const data = await fetchVerifierQueue();
-      setSource(data.source || '');
+      const src = data.source || '';
+      setSource(src);
+      setFeedDebug(data.debug ?? null);
       if (data.reports && data.reports.length > 0) {
         setReports(data.reports);
         setUseDemo(false);
-      } else {
-        setReports(demoVerifierReports);
-        setUseDemo(true);
-        setLoadErr(data.message || null);
+        setLoadErr(null);
+        return;
       }
-    } catch (e: unknown) {
+      if (src === 'upstream_empty' || src === 'unconfigured' || src === 'upstream_error') {
+        setReports([]);
+        setUseDemo(false);
+        setLoadErr(data.message || (src === 'upstream_empty' ? 'Feed returned no reports.' : 'Could not load upstream feed.'));
+        return;
+      }
       setReports(demoVerifierReports);
       setUseDemo(true);
+      setLoadErr(data.message || null);
+    } catch (e: unknown) {
+      setReports([]);
+      setUseDemo(false);
       setLoadErr(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
@@ -301,9 +312,20 @@ export function VerifierPortal() {
             <div className="top-bar-meta">
               Live queue · outbound actions · audit trail
               {useDemo && (
-                <span style={{ color: '#fcd34d', marginLeft: '0.5rem' }}>· Demo data (no upstream feed)</span>
+                <span style={{ color: '#fcd34d', marginLeft: '0.5rem' }}>· Sample queue (enable upstream for live data)</span>
               )}
-              {source === 'upstream' && <span style={{ color: '#86efac', marginLeft: '0.5rem' }}>· Upstream feed</span>}
+              {source === 'upstream' && !useDemo && (
+                <span style={{ color: '#86efac', marginLeft: '0.5rem' }}>· Live upstream feed</span>
+              )}
+              {source === 'upstream_empty' && !useDemo && (
+                <span style={{ color: '#93c5fd', marginLeft: '0.5rem' }}>· Connected — feed has no reports yet</span>
+              )}
+              {source === 'unconfigured' && !useDemo && (
+                <span style={{ color: '#fca5a5', marginLeft: '0.5rem' }}>· DPAL_UPSTREAM_URL not set on Reviewer API</span>
+              )}
+              {source === 'upstream_error' && !useDemo && (
+                <span style={{ color: '#fca5a5', marginLeft: '0.5rem' }}>· Upstream feed request failed</span>
+              )}
             </div>
           </div>
           <div className="top-bar-actions">
@@ -312,6 +334,34 @@ export function VerifierPortal() {
             </button>
           </div>
         </header>
+
+        {loadErr && !useDemo && (
+          <div
+            role="status"
+            style={{
+              margin: '0 0 0.75rem',
+              padding: '0.65rem 0.85rem',
+              borderRadius: '8px',
+              border: `1px solid ${source === 'upstream_empty' ? 'rgba(59, 130, 246, 0.35)' : 'rgba(248, 113, 113, 0.4)'}`,
+              background:
+                source === 'upstream_empty' ? 'rgba(59, 130, 246, 0.1)' : 'rgba(248, 113, 113, 0.08)',
+              fontSize: '0.78rem',
+              lineHeight: 1.45,
+              maxWidth: '52rem',
+            }}
+          >
+            <strong style={{ color: 'var(--silver)' }}>
+              {source === 'upstream_empty' ? 'No filings on the server yet' : 'Queue could not load live data'}
+            </strong>
+            <div style={{ marginTop: '0.35rem', color: 'var(--silver-dim)' }}>{loadErr}</div>
+            {feedDebug?.feedUrl && (
+              <div className="mono" style={{ marginTop: '0.45rem', fontSize: '0.65rem', wordBreak: 'break-all', opacity: 0.9 }}>
+                Tried: {feedDebug.feedUrl}
+                {feedDebug.httpStatus != null ? ` → HTTP ${feedDebug.httpStatus}` : ''}
+              </div>
+            )}
+          </div>
+        )}
 
         <p
           role="note"
@@ -391,7 +441,7 @@ export function VerifierPortal() {
           </div>
         )}
 
-        {loadErr && !notice && (
+        {loadErr && useDemo && !notice && (
           <p className="text-muted" style={{ padding: '0 1rem', fontSize: '0.78rem' }}>
             Queue notice: {loadErr}
           </p>
@@ -525,12 +575,21 @@ export function VerifierPortal() {
                       </div>
                     </button>
                   ))}
+                  {filtered.length === 0 && !useDemo && (
+                    <p className="text-muted" style={{ fontSize: '0.78rem', margin: 0 }}>
+                      No reports in this queue. Use the status box above — then POST filings to your main API and refresh.
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
 
             <div className="panel span-8">
-              {!selected ? (
+              {!selected && !useDemo && reports.length === 0 ? (
+                <div className="panel-body">
+                  <p className="text-muted">No report selected — the queue is empty until the feed returns filings.</p>
+                </div>
+              ) : !selected ? (
                 <div className="panel-body">
                   <p className="text-muted">Select a report from the queue.</p>
                 </div>
