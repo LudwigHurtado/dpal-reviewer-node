@@ -92,6 +92,10 @@ npm run dev:all
 
 For static hosting only (e.g. Vercel), deploy the Express API separately and set `VITE_API_BASE_URL` to that API’s `/api` origin.
 
+### “404” on `/api/reviewer/v1/verifier/reports`
+
+That path exists **only** on the **Reviewer Node** server (`server/index.mjs`). If `VITE_API_BASE_URL` points at your **main** DPAL API (e.g. `web-production-…up.railway.app`), the browser will get **404** — the filing API does not mount the verifier routes. You need **two** services: (1) main API for `POST/GET /api/reports*`, (2) Reviewer API for `/api/reviewer/v1/verifier/*`, with `DPAL_UPSTREAM_URL` on (2) set to (1)’s origin.
+
 ## Live reports + reviewer opinions (production)
 
 The static site (e.g. [dpal-reviewer-node on Vercel](https://dpal-reviewer-node.vercel.app/)) **does not run Node** — it only serves the built UI. To load **real reports** and save **opinions / recommended effects**:

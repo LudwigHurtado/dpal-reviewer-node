@@ -35,10 +35,13 @@ async function parseJsonSafe(res: Response): Promise<Record<string, unknown>> {
 
 function httpError(res: Response, url: string, data: Record<string, unknown>): Error {
   const apiErr = typeof data.error === 'string' ? data.error : '';
-  const hint =
-    res.status === 404
-      ? ' This usually means the browser is not talking to the Reviewer Node API. Locally: unset VITE_API_BASE_URL, run `npm run dev:api` (or `npm run dev:all`). Production: set VITE_API_BASE_URL to your deployed Reviewer service URL ending in /api — not the main DPAL filing API unless it also hosts /api/reviewer/v1/verifier.'
-      : '';
+  const hint404 =
+    ' The Verifier UI must call the Reviewer Node Express app (this repo server/index.mjs), not the main DPAL filing API. ' +
+    'Those are two different deployments. Deploy server/index.mjs to Railway (or similar), set DPAL_UPSTREAM_URL there to your main API (e.g. web-production-…), ' +
+    'then set Vercel VITE_API_BASE_URL to that Reviewer service URL ending in /api (e.g. https://your-reviewer-service.up.railway.app/api). ' +
+    'Do not set VITE_API_BASE_URL to the main filing host unless it also implements /api/reviewer/v1/verifier/*. ' +
+    'Locally: remove VITE_API_BASE_URL and run npm run dev:all so /api proxies to port 8787.';
+  const hint = res.status === 404 ? hint404 : '';
   return new Error(`${apiErr || res.statusText || res.status} (${res.status}) — ${url}${hint}`);
 }
 
