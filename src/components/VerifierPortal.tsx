@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   fetchVerifierQueue,
   fetchVerifierReportDetail,
@@ -25,6 +25,26 @@ function severityStyle(s: Severity): string {
 
 function statusLabel(s: string): string {
   return s.replaceAll('_', ' ');
+}
+
+/** Shrink full detail back to a queue row for the left-hand list. */
+function detailToQueueRow(r: VerifierReportDetail): VerifierQueueRow {
+  const evCount = Array.isArray(r.evidence) ? r.evidence.length : r.evidenceCount;
+  return {
+    id: r.id,
+    title: r.title,
+    summary: (r.summary || r.description || '').slice(0, 500),
+    category: r.category,
+    categoryKey: r.categoryKey,
+    city: r.city,
+    severity: r.severity,
+    verificationScore: r.verificationScore,
+    status: r.status,
+    evidenceCount: evCount,
+    stage: r.stage,
+    publicUrl: r.publicUrl,
+    thumbnailUrl: r.thumbnailUrl,
+  };
 }
 
 function syntheticDetail(row: VerifierQueueRow): {
@@ -78,7 +98,9 @@ export function VerifierPortal() {
 
   const [tab, setTab] = useState<Tab>('verify');
   const [query, setQuery] = useState('');
+  const [manualReportId, setManualReportId] = useState('');
   const [category, setCategory] = useState<string>('all');
+  const openedReportIdFromUrl = useRef(false);
 
   const [notes, setNotes] = useState('');
   const [actionType, setActionType] = useState('call');
@@ -119,9 +141,40 @@ export function VerifierPortal() {
     }
   }, []);
 
+  /** Load one filing by id from upstream GET /api/reports/:id (works when the feed omits it or is capped). */
+  const openByReportId = useCallback(async (rawId: string) => {
+    const id = rawId.trim();
+    if (!id) return;
+    setNotice(null);
+    setDetailLoading(true);
+    try {
+      const d = await fetchVerifierReportDetail(id);
+      const row = detailToQueueRow(d.report);
+      setReports((prev) => (prev.some((r) => r.id === row.id) ? prev : [row, ...prev]));
+      setSelectedId(row.id);
+      setUseDemo(false);
+    } catch (e: unknown) {
+      const base = e instanceof Error ? e.message : String(e);
+      setNotice(
+        `${base} — The Ledger can show filings still only in your browser. The verifier needs that filing on the server: successful POST /api/reports (or anchor), and GET /api/reports/${id} must return the document. The stored id may differ from the on-screen number (check the network tab or Mongo).`,
+      );
+    } finally {
+      setDetailLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     void loadQueue();
   }, [loadQueue]);
+
+  useEffect(() => {
+    if (openedReportIdFromUrl.current) return;
+    const id = new URLSearchParams(window.location.search).get('reportId')?.trim();
+    if (!id) return;
+    openedReportIdFromUrl.current = true;
+    setManualReportId(id);
+    void openByReportId(id);
+  }, [openByReportId]);
 
   useEffect(() => {
     const id = window.setInterval(() => {
@@ -514,6 +567,39 @@ export function VerifierPortal() {
                     <option value="public_safety">Public safety</option>
                     <option value="medical">Medical</option>
                   </select>
+                  <div style={{ fontSize: '0.65rem', color: 'var(--silver-dim)', marginTop: '0.25rem' }}>
+                    Not in the list? Open by server report id (from API / certificate link):
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                    <input
+                      placeholder="e.g. 1775350956460 or Mongo _id"
+                      value={manualReportId}
+                      onChange={(e) => setManualReportId(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') void openByReportId(manualReportId);
+                      }}
+                      style={{
+                        flex: '1 1 140px',
+                        minWidth: '120px',
+                        padding: '0.45rem 0.6rem',
+                        background: 'var(--bg-deep)',
+                        border: '1px solid var(--graphite-border)',
+                        borderRadius: '6px',
+                        color: 'var(--white)',
+                        fontSize: '0.75rem',
+                      }}
+                      aria-label="Report id to load from API"
+                    />
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      style={{ fontSize: '0.72rem' }}
+                      disabled={detailLoading || !manualReportId.trim()}
+                      onClick={() => void openByReportId(manualReportId)}
+                    >
+                      Load by ID
+                    </button>
+                  </div>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '62vh', overflow: 'auto' }}>
                   {filtered.map((r) => (
