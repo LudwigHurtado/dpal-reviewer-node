@@ -1,5 +1,10 @@
 import { Router } from 'express';
-import { fetchUpstreamFeedRawList, fetchUpstreamReportById } from './lib/upstream.mjs';
+import {
+  fetchUpstreamFeedRawList,
+  fetchUpstreamReportById,
+  resolveUpstreamAssetUrl,
+  collectImageUrlStringsFromReportShape,
+} from './lib/upstream.mjs';
 import { toVerifierQueueRow } from './lib/verifierRows.mjs';
 import {
   readAudit,
@@ -46,25 +51,29 @@ export function createVerifierPortalRouter() {
       }
 
       const p = doc.payload && typeof doc.payload === 'object' ? doc.payload : doc;
-      const imageUrls = Array.isArray(p.imageUrls) ? p.imageUrls : Array.isArray(doc.imageUrls) ? doc.imageUrls : [];
+      const mergedUrls = collectImageUrlStringsFromReportShape(doc);
       const records = p.evidenceVault?.records || doc.evidenceVault?.records;
       const evidence = [];
       let i = 0;
-      for (const url of imageUrls.slice(0, 24)) {
+      for (const url of mergedUrls.slice(0, 48)) {
+        const abs = resolveUpstreamAssetUrl(url);
+        if (!abs || abs.startsWith('blob:')) continue;
         evidence.push({
           id: `ev-img-${i++}`,
           type: 'image',
-          file_url: url,
-          thumbnail_url: url,
+          file_url: abs,
+          thumbnail_url: abs,
           uploaded_at: doc.anchoredAt || doc.submittedAt,
         });
       }
       if (Array.isArray(records)) {
         for (const r of records) {
+          const link = r.verificationLink ? resolveUpstreamAssetUrl(r.verificationLink) : '';
           evidence.push({
             id: r.evidenceRefId || `ev-${i++}`,
             type: r.mimeType?.startsWith('audio') ? 'audio' : 'file',
-            file_url: r.verificationLink || '',
+            file_url: link,
+            thumbnail_url: link || undefined,
             metadata: r,
             uploaded_at: r.timestampIso,
           });

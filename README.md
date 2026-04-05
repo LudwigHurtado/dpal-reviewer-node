@@ -98,7 +98,8 @@ The static site (e.g. [dpal-reviewer-node on Vercel](https://dpal-reviewer-node.
 
 1. **Host the reviewer API** (`server/index.mjs`) on Railway, Render, Fly.io, a VPS, etc. Expose `GET /api/reviewer/v1/dashboard` and `POST /api/reviewer/v1/reports/:reportId/review`.
 2. **Point the UI at that API:** in Vercel → Project → Settings → Environment Variables, set **`VITE_API_BASE_URL`** to your API base, e.g. `https://your-api.example.com/api` (no trailing slash). Redeploy so Vite bakes it in.
-3. **Merge reports from main DPAL:** on the **API server**, set **`DPAL_UPSTREAM_URL`** to your main backend origin and **`DPAL_UPSTREAM_REPORTS_PATH`** to the path that returns a JSON array (or `{ reports | data | items }`). See `server/lib/upstream.mjs`.
-4. **Public “Open report” links:** set **`VITE_DPAL_PUBLIC_WEB_URL`** on Vercel to your DPAL web app origin (e.g. `https://your-dpal-front.vercel.app`), **or** set **`DPAL_PUBLIC_REPORT_BASE`** on the API server to the same (links are built as `?reportId=<id>`).
+3. **Merge reports from main DPAL:** on the **API server**, set **`DPAL_UPSTREAM_URL`** to your main backend origin and **`DPAL_UPSTREAM_REPORTS_PATH`** to the path that returns a JSON array (or `{ reports | data | items }`). See `server/lib/upstream.mjs`. Put these in **`.env`** or **`.env.local`** in the project root (both are loaded when the API starts).
+4. **Same backend for filings and feed:** the main app’s **`VITE_API_BASE`** (or equivalent) must be the **same origin** as **`DPAL_UPSTREAM_URL`**. Reports and images only appear after successful **`POST /api/reports`** (or anchor) to that backend. Relative image paths (`/api/assets/…`) are resolved against **`DPAL_UPSTREAM_URL`** so thumbnails load in the Validator UI.
+5. **Public “Open report” links:** set **`VITE_DPAL_PUBLIC_WEB_URL`** on Vercel to your DPAL web app origin (e.g. `https://your-dpal-front.vercel.app`), **or** set **`DPAL_PUBLIC_REPORT_BASE`** on the API server to the same (links are built as `?reportId=<id>`).
 
 Saved reviewer entries are stored in **`server/data/reviewer-reviews.json`** on the API host (no per-user auth yet — add later).

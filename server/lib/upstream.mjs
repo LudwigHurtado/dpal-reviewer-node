@@ -44,6 +44,36 @@ export function buildPublicReportUrl(reportId) {
   return `${base}${hasQuery ? '&' : '?'}reportId=${encodeURIComponent(id)}`;
 }
 
+/**
+ * Turn relative API paths (/api/assets/…) into absolute URLs so the Validator UI (different origin) can load images.
+ * Blob URLs cannot be resolved cross-origin and are returned as-is (usually unusable in another app).
+ */
+export function resolveUpstreamAssetUrl(url) {
+  const u = String(url || '').trim();
+  if (!u || u.startsWith('blob:')) return u;
+  if (/^https?:\/\//i.test(u)) return u;
+  const base = process.env.DPAL_UPSTREAM_URL?.replace(/\/$/, '');
+  if (!base) return u;
+  if (u.startsWith('//')) return `https:${u}`;
+  if (u.startsWith('/')) return `${base}${u}`;
+  return `${base}/${u}`;
+}
+
+/** Collect every image URL string stored by the main DPAL app (payload + top-level + filing history). */
+export function collectImageUrlStringsFromReportShape(rawDoc) {
+  const out = [];
+  const push = (v) => {
+    if (typeof v === 'string' && v.trim()) out.push(v.trim());
+  };
+  const doc = rawDoc && typeof rawDoc === 'object' ? rawDoc : {};
+  const p = doc.payload && typeof doc.payload === 'object' ? doc.payload : {};
+  if (Array.isArray(doc.imageUrls)) doc.imageUrls.forEach(push);
+  if (Array.isArray(p.imageUrls)) p.imageUrls.forEach(push);
+  if (Array.isArray(doc.filingImageHistory)) doc.filingImageHistory.forEach(push);
+  if (Array.isArray(p.filingImageHistory)) p.filingImageHistory.forEach(push);
+  return [...new Set(out)];
+}
+
 export function mapUpstreamReport(r) {
   const id = pickStr(r, ['id', 'report_id', 'reportId', 'uuid', 'public_id'], '');
   const title = pickStr(r, ['title', 'subject', 'name', 'headline'], 'Untitled report');
@@ -159,5 +189,8 @@ export async function fetchUpstreamReportById(reportId) {
   if (auth) headers.Authorization = auth;
   const res = await fetch(`${base}/api/reports/${id}`, { headers });
   if (!res.ok) return null;
-  return res.json();
+  const body = await res.json();
+  if (body && typeof body === 'object' && body.report && typeof body.report === 'object') return body.report;
+  if (body && typeof body === 'object' && body.data && typeof body.data === 'object') return body.data;
+  return body;
 }

@@ -466,8 +466,31 @@ export function VerifierPortal() {
                         background: selectedId === r.id ? 'var(--bg-panel-hover)' : 'var(--bg-elevated)',
                         color: 'inherit',
                         cursor: 'pointer',
+                        display: 'grid',
+                        gridTemplateColumns: r.thumbnailUrl ? '72px 1fr' : '1fr',
+                        gap: '0.65rem',
+                        alignItems: 'start',
                       }}
                     >
+                      {r.thumbnailUrl ? (
+                        <img
+                          src={r.thumbnailUrl}
+                          alt=""
+                          width={72}
+                          height={72}
+                          style={{
+                            width: '72px',
+                            height: '72px',
+                            objectFit: 'cover',
+                            borderRadius: '6px',
+                            border: '1px solid var(--graphite-border)',
+                            background: 'var(--bg-deep)',
+                          }}
+                          loading="lazy"
+                          referrerPolicy="no-referrer"
+                        />
+                      ) : null}
+                      <div style={{ minWidth: 0 }}>
                       <div className="mono" style={{ fontSize: '0.65rem', color: 'var(--silver-dim)' }}>
                         {r.id}
                       </div>
@@ -481,6 +504,7 @@ export function VerifierPortal() {
                       </div>
                       <div className="text-muted" style={{ fontSize: '0.68rem', marginTop: '0.35rem' }}>
                         {r.evidenceCount} evidence · {r.verificationScore}% score
+                      </div>
                       </div>
                     </button>
                   ))}
@@ -535,16 +559,59 @@ export function VerifierPortal() {
                     )}
 
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginTop: '1rem' }}>
-                      <div style={{ border: '1px solid var(--graphite-border)', borderRadius: 'var(--radius-lg)', padding: '0.75rem' }}>
+                        <div style={{ border: '1px solid var(--graphite-border)', borderRadius: 'var(--radius-lg)', padding: '0.75rem' }}>
                         <div className="section-title">Evidence</div>
                         <p className="text-muted" style={{ fontSize: '0.75rem' }}>
                           {detail?.report.evidence?.length ?? 0} items
                         </p>
-                        <ul style={{ margin: '0.5rem 0 0', paddingLeft: '1.1rem', fontSize: '0.78rem' }}>
-                          {(detail?.report.evidence || []).slice(0, 8).map((ev) => (
-                            <li key={ev.id}>{ev.type}</li>
-                          ))}
-                        </ul>
+                        <div
+                          style={{
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))',
+                            gap: '0.5rem',
+                            marginTop: '0.5rem',
+                          }}
+                        >
+                          {(detail?.report.evidence || []).slice(0, 12).map((ev) =>
+                            ev.type === 'image' && ev.file_url ? (
+                              <a
+                                key={ev.id}
+                                href={ev.file_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{ display: 'block', lineHeight: 0 }}
+                              >
+                                <img
+                                  src={ev.thumbnail_url || ev.file_url}
+                                  alt="Filing evidence"
+                                  width={120}
+                                  height={120}
+                                  style={{
+                                    width: '100%',
+                                    height: '100px',
+                                    objectFit: 'cover',
+                                    borderRadius: '6px',
+                                    border: '1px solid var(--graphite-border)',
+                                  }}
+                                  loading="lazy"
+                                  referrerPolicy="no-referrer"
+                                />
+                              </a>
+                            ) : (
+                              <div key={ev.id} className="text-muted" style={{ fontSize: '0.72rem', wordBreak: 'break-all' }}>
+                                {ev.type}
+                                {ev.file_url ? (
+                                  <>
+                                    {' · '}
+                                    <a href={ev.file_url} target="_blank" rel="noopener noreferrer">
+                                      open
+                                    </a>
+                                  </>
+                                ) : null}
+                              </div>
+                            ),
+                          )}
+                        </div>
                       </div>
                       <div style={{ border: '1px solid var(--graphite-border)', borderRadius: 'var(--radius-lg)', padding: '0.75rem' }}>
                         <div className="section-title">Category playbook</div>

@@ -1,14 +1,20 @@
-import 'dotenv/config';
+import dotenv from 'dotenv';
 import express from 'express';
 import cors from 'cors';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const projectRoot = join(__dirname, '..');
+dotenv.config({ path: join(projectRoot, '.env') });
+dotenv.config({ path: join(projectRoot, '.env.local'), override: true });
+
 import { fetchUpstreamReports, buildPublicReportUrl } from './lib/upstream.mjs';
 import { readReviews, upsertReview, ALLOWED_EFFECTS } from './lib/reviewsStore.mjs';
 import { createVerifierPortalRouter } from './verifierRoutes.mjs';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
 const DATA_FILE = join(__dirname, 'data', 'dashboard.json');
 
 const PORT = Number(process.env.REVIEWER_API_PORT || process.env.PORT || 8787);

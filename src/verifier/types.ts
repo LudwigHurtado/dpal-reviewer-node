@@ -15,6 +15,8 @@ export interface VerifierQueueRow {
   evidenceCount: number;
   stage?: string;
   publicUrl?: string;
+  /** First filing image, absolute URL (server resolves paths against DPAL_UPSTREAM_URL). */
+  thumbnailUrl?: string;
 }
 
 export interface VerifierEvidenceItem {

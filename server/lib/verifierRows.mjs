@@ -1,4 +1,9 @@
-import { mapUpstreamReport, buildPublicReportUrl } from './upstream.mjs';
+import {
+  mapUpstreamReport,
+  buildPublicReportUrl,
+  resolveUpstreamAssetUrl,
+  collectImageUrlStringsFromReportShape,
+} from './upstream.mjs';
 
 function pickStr(obj, keys, fallback = '') {
   for (const k of keys) {
@@ -11,9 +16,14 @@ function countEvidence(raw) {
   const p = raw?.payload || raw;
   let n = 0;
   if (Array.isArray(p.imageUrls)) n += p.imageUrls.length;
+  if (Array.isArray(raw?.imageUrls)) n = Math.max(n, raw.imageUrls.length);
+  if (Array.isArray(p.filingImageHistory)) n = Math.max(n, p.filingImageHistory.length);
+  if (Array.isArray(raw?.filingImageHistory)) n = Math.max(n, raw.filingImageHistory.length);
   const rec = p.evidenceVault?.records;
   if (Array.isArray(rec)) n += rec.length;
   if (typeof raw?.evidenceCount === 'number') n = Math.max(n, raw.evidenceCount);
+  const collected = collectImageUrlStringsFromReportShape(raw);
+  n = Math.max(n, collected.length);
   return n;
 }
 
@@ -65,6 +75,8 @@ export function toVerifierQueueRow(raw) {
   const categoryKey = categoryToKey(base.category);
   const severity = inferSeverity(raw, base);
   const status = lifecycleToStatus(p.lifecycleState || raw.lifecycleState, base.stage);
+  const imgUrls = collectImageUrlStringsFromReportShape(raw);
+  const thumbnailUrl = imgUrls[0] ? resolveUpstreamAssetUrl(imgUrls[0]) : undefined;
 
   return {
     id,
@@ -79,6 +91,7 @@ export function toVerifierQueueRow(raw) {
     evidenceCount,
     stage: base.stage,
     publicUrl: base.publicUrl || buildPublicReportUrl(id),
+    ...(thumbnailUrl ? { thumbnailUrl } : {}),
   };
 }
 
