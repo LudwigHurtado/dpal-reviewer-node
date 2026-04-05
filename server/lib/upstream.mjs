@@ -74,18 +74,42 @@ export function collectImageUrlStringsFromReportShape(rawDoc) {
   return [...new Set(out)];
 }
 
+function payloadObj(r) {
+  return r?.payload && typeof r.payload === 'object' ? r.payload : {};
+}
+
+/** Prefer top-level fields, then Mongo-style `payload`, then `_id` (ObjectId or string). */
 export function mapUpstreamReport(r) {
-  const id = pickStr(r, ['id', 'report_id', 'reportId', 'uuid', 'public_id'], '');
-  const title = pickStr(r, ['title', 'subject', 'name', 'headline'], 'Untitled report');
-  const summary = pickStr(r, ['summary', 'description', 'body', 'details'], '');
-  const category = pickStr(r, ['category', 'type', 'topic', 'sector'], 'General');
-  const stage = pickStr(r, ['stage', 'status', 'review_stage', 'lifecycleState'], 'Triage');
+  const p = payloadObj(r);
+  let id = pickStr(r, ['id', 'report_id', 'reportId', 'uuid', 'public_id'], '');
+  if (!id && r?._id != null) id = String(r._id);
+  if (!id) id = pickStr(p, ['id', 'reportId'], '');
+  const title =
+    pickStr(r, ['title', 'subject', 'name', 'headline'], '') ||
+    pickStr(p, ['title', 'subject', 'name', 'headline'], 'Untitled report');
+  const summary =
+    pickStr(r, ['summary', 'description', 'body', 'details'], '') ||
+    pickStr(p, ['summary', 'description', 'body', 'details'], '');
+  const category =
+    pickStr(r, ['category', 'type', 'topic', 'sector'], '') ||
+    pickStr(p, ['category', 'type', 'topic', 'sector'], 'General');
+  const stage =
+    pickStr(r, ['stage', 'status', 'review_stage', 'lifecycleState'], '') ||
+    pickStr(p, ['stage', 'lifecycleState'], 'Triage');
   const assignee = pickStr(r, ['assignee', 'assigned_to', 'reviewer'], 'Unassigned');
   const sla = pickStr(r, ['sla', 'sla_window'], '—');
-  const confidence = Math.min(100, Math.max(0, pickNum(r, ['confidence', 'score', 'confidence_pct'], 50)));
-  const submittedAt = pickStr(r, ['submittedAt', 'submitted_at', 'created_at', 'createdAt', 'updatedAt', 'timestamp'], '');
-  const location = pickStr(r, ['location', 'region', 'city'], '');
-  const publicUrlRaw = pickStr(r, ['publicUrl', 'url', 'link', 'public_url', 'web_url'], '');
+  let conf = pickNum(r, ['confidence', 'score', 'confidence_pct'], NaN);
+  if (!Number.isFinite(conf)) conf = pickNum(p, ['confidence', 'score'], 50);
+  const confidence = Math.min(100, Math.max(0, conf));
+  const submittedAt =
+    pickStr(r, ['submittedAt', 'submitted_at', 'created_at', 'createdAt', 'updatedAt', 'timestamp'], '') ||
+    pickStr(p, ['submittedAt', 'createdAt', 'timestamp'], '');
+  const location =
+    pickStr(r, ['location', 'region', 'city'], '') ||
+    pickStr(p, ['location', 'city', 'region'], '');
+  const publicUrlRaw =
+    pickStr(r, ['publicUrl', 'url', 'link', 'public_url', 'web_url'], '') ||
+    pickStr(p, ['publicUrl', 'url'], '');
 
   const resolvedId = id || `RPT-${Date.now()}`;
   const publicUrl = publicUrlRaw || buildPublicReportUrl(resolvedId);

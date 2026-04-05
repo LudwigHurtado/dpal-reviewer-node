@@ -313,6 +313,23 @@ export function VerifierPortal() {
           </div>
         </header>
 
+        <p
+          role="note"
+          style={{
+            fontSize: '0.72rem',
+            color: 'var(--silver-dim)',
+            margin: '0 0 0.75rem',
+            maxWidth: '52rem',
+            lineHeight: 1.5,
+          }}
+        >
+          <strong style={{ color: 'var(--silver)' }}>Library vs queue:</strong> The DPAL home hub merges{' '}
+          <em>device-only</em> filings (localStorage) with the server feed. This portal only lists reports returned by your
+          upstream API (<span className="mono">GET …/api/reports/feed</span>). To appear here, filings must be saved to the
+          same backend your main app uses (<span className="mono">POST /api/reports</span> or anchor). IDs must match{' '}
+          <span className="mono">GET /api/reports/:id</span> for full detail and images.
+        </p>
+
         <section
           aria-label="DPAL Validator Portal"
           style={{
