@@ -2,6 +2,7 @@ import { Router } from 'express';
 import {
   fetchUpstreamVerifierFeedResult,
   fetchUpstreamReportById,
+  fetchUpstreamSituationMessages,
   resolveUpstreamAssetUrl,
   collectImageUrlStringsFromReportShape,
 } from './lib/upstream.mjs';
@@ -111,6 +112,7 @@ export function createVerifierPortalRouter() {
       const notes = getNotes(reportId);
       const timeline = getTimeline(reportId);
       const priorActions = getActionsForReport(reportId);
+      const situationMessages = await fetchUpstreamSituationMessages(reportId);
 
       const syntheticRaw = {
         id: doc.id || reportId,
@@ -120,7 +122,7 @@ export function createVerifierPortalRouter() {
           description: p.description ?? doc.description,
           category: p.category ?? doc.category,
           location: p.location ?? doc.location,
-          imageUrls,
+          imageUrls: mergedUrls,
           evidenceVault: p.evidenceVault ?? doc.evidenceVault,
           lifecycleState: doc.lifecycleState,
         },
@@ -137,13 +139,14 @@ export function createVerifierPortalRouter() {
           longitude: p.longitude ?? doc.longitude,
           location: String(p.location ?? doc.location ?? row.city ?? ''),
           urgency: row.severity,
-          reporter: String(p.reporterLabel || 'Reporter'),
+          reporter: String(p.reporterLabel || p.reporter || doc.reporterLabel || 'Reporter'),
           evidence,
           priorActions,
           recommendedRouting: row.categoryKey,
         },
         notes,
         timeline,
+        situationMessages,
       });
     } catch (e) {
       console.error(e);

@@ -49,11 +49,23 @@ export interface TimelineEvent {
   performedBy?: string;
 }
 
+/** Mirrors main app situation room messages when upstream exposes GET /api/situation/:id/messages */
+export interface VerifierSituationMessage {
+  id: string;
+  sender: string;
+  text: string;
+  timestamp: number;
+  isSystem?: boolean;
+  imageUrl?: string;
+  audioUrl?: string;
+}
+
 export interface VerifierDetailResponse {
   ok: boolean;
   report: VerifierReportDetail;
   notes: { text: string; updatedAt: string | null };
   timeline: TimelineEvent[];
+  situationMessages?: VerifierSituationMessage[];
 }
 
 export interface VerifierQueueResponse {

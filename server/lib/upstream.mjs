@@ -265,6 +265,45 @@ export async function fetchUpstreamFeedRawList() {
 }
 
 /**
+ * Situation-room chat for a report (same contract as dpal-front-end situationService).
+ * GET {DPAL_UPSTREAM_URL}/api/situation/:roomId/messages?limit=200
+ */
+export async function fetchUpstreamSituationMessages(roomId) {
+  const base = process.env.DPAL_UPSTREAM_URL?.replace(/\/$/, '');
+  if (!base || roomId == null || String(roomId).trim() === '') return [];
+
+  const headers = { Accept: 'application/json' };
+  const auth = process.env.DPAL_UPSTREAM_AUTH_HEADER;
+  if (auth) headers.Authorization = auth;
+
+  const raw = String(roomId).trim();
+  const variants = [...new Set([raw, raw.replace(/^REP-/i, 'rep-'), raw.replace(/^rep-/i, 'REP-')])];
+
+  for (const rid of variants) {
+    if (!rid) continue;
+    try {
+      const enc = encodeURIComponent(rid);
+      const res = await fetch(`${base}/api/situation/${enc}/messages?limit=200`, { headers });
+      if (!res.ok) continue;
+      const data = await res.json();
+      const list = Array.isArray(data?.messages) ? data.messages : [];
+      return list.map((m) => ({
+        id: String(m?.id || m?._id || `m-${Math.random().toString(36).slice(2, 9)}`),
+        sender: String(m?.sender || 'OPERATIVE'),
+        text: String(m?.text || ''),
+        timestamp: Number(m?.timestamp || 0) || Date.now(),
+        isSystem: Boolean(m?.isSystem),
+        imageUrl: m?.imageUrl ? resolveUpstreamAssetUrl(String(m.imageUrl)) : undefined,
+        audioUrl: m?.audioUrl ? String(m.audioUrl) : undefined,
+      }));
+    } catch {
+      /* try next variant */
+    }
+  }
+  return [];
+}
+
+/**
  * Full report document from main API (Mongo anchor). Enables verifier detail panel.
  */
 export async function fetchUpstreamReportById(reportId) {

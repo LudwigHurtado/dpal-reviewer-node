@@ -8,10 +8,17 @@ import {
   postVerify,
 } from '../api/verifierClient';
 import { categoryPlaybooks } from '../verifier/categoryPlaybooks';
-import type { CategoryKey, Severity, VerifierQueueRow, VerifierReportDetail, TimelineEvent } from '../verifier/types';
+import type {
+  CategoryKey,
+  Severity,
+  VerifierQueueRow,
+  VerifierReportDetail,
+  TimelineEvent,
+  VerifierSituationMessage,
+} from '../verifier/types';
 import { demoVerifierReports } from '../data/verifierDemo';
 
-type Tab = 'verify' | 'actions' | 'history' | 'routing';
+type Tab = 'verify' | 'actions' | 'history' | 'routing' | 'situation';
 
 function severityStyle(s: Severity): string {
   const map: Record<Severity, string> = {
@@ -51,6 +58,7 @@ function syntheticDetail(row: VerifierQueueRow): {
   report: VerifierReportDetail;
   notes: { text: string; updatedAt: string | null };
   timeline: TimelineEvent[];
+  situationMessages: VerifierSituationMessage[];
 } {
   return {
     report: {
@@ -77,6 +85,7 @@ function syntheticDetail(row: VerifierQueueRow): {
         detail: 'Connect DPAL_UPSTREAM_URL on the reviewer API to load real filings.',
       },
     ],
+    situationMessages: [],
   };
 }
 
@@ -94,6 +103,7 @@ export function VerifierPortal() {
     report: VerifierReportDetail;
     notes: { text: string; updatedAt: string | null };
     timeline: TimelineEvent[];
+    situationMessages: VerifierSituationMessage[];
   } | null>(null);
 
   const [tab, setTab] = useState<Tab>('verify');
@@ -198,6 +208,7 @@ export function VerifierPortal() {
             report: d.report,
             notes: d.notes,
             timeline: d.timeline || [],
+            situationMessages: d.situationMessages ?? [],
           });
           setNotes(d.notes?.text || '');
         }
@@ -247,6 +258,20 @@ export function VerifierPortal() {
     const open = reports.filter((r) => r.status !== 'resolved').length;
     return { urgent, ready, avg, open };
   }, [reports]);
+
+  const situationRoomDeepLink = useMemo(() => {
+    const raw = import.meta.env.VITE_DPAL_PUBLIC_WEB_URL;
+    const rid = detail?.report?.id ?? selected?.id;
+    if (typeof raw !== 'string' || !raw.trim() || !rid) return null;
+    try {
+      const u = new URL(raw.trim().replace(/\/$/, ''));
+      u.searchParams.set('reportId', rid);
+      u.searchParams.set('situationRoom', '1');
+      return u.toString();
+    } catch {
+      return null;
+    }
+  }, [detail?.report?.id, selected?.id]);
 
   const checks = useMemo(() => {
     if (!selected) return [];
@@ -789,7 +814,7 @@ export function VerifierPortal() {
                     </div>
 
                     <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', marginTop: '1rem' }}>
-                      {(['verify', 'actions', 'history', 'routing'] as Tab[]).map((t) => (
+                      {(['verify', 'actions', 'history', 'situation', 'routing'] as Tab[]).map((t) => (
                         <button
                           key={t}
                           type="button"
@@ -800,6 +825,8 @@ export function VerifierPortal() {
                           {t === 'verify' && 'Verification'}
                           {t === 'actions' && 'Outbound actions'}
                           {t === 'history' && 'Timeline'}
+                          {t === 'situation' &&
+                            `Situation chat${(detail?.situationMessages?.length ?? 0) > 0 ? ` (${detail?.situationMessages?.length})` : ''}`}
                           {t === 'routing' && 'Routing rules'}
                         </button>
                       ))}
@@ -946,6 +973,85 @@ export function VerifierPortal() {
                       </div>
                     )}
 
+                    {tab === 'situation' && (
+                      <div style={{ marginTop: '1rem' }}>
+                        <div
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'flex-start',
+                            gap: '1rem',
+                            flexWrap: 'wrap',
+                          }}
+                        >
+                          <div className="section-title">Situation room thread</div>
+                          {situationRoomDeepLink ? (
+                            <a
+                              href={situationRoomDeepLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="btn btn-primary"
+                              style={{ fontSize: '0.72rem' }}
+                            >
+                              Open full chat in DPAL ↗
+                            </a>
+                          ) : null}
+                        </div>
+                        <p className="text-muted" style={{ fontSize: '0.72rem', marginTop: '0.35rem', lineHeight: 1.45 }}>
+                          Read-only copy of messages from your filing API (
+                          <span className="mono">GET /api/situation/:reportId/messages</span>). Set{' '}
+                          <span className="mono">VITE_DPAL_PUBLIC_WEB_URL</span> on Vercel for the button above. New chat and
+                          media uploads happen in the main app; use notes and outbound actions here for audit.
+                        </p>
+                        <div
+                          style={{
+                            maxHeight: 'min(50vh, 420px)',
+                            overflowY: 'auto',
+                            marginTop: '0.75rem',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '0.5rem',
+                          }}
+                        >
+                          {(detail?.situationMessages || []).length === 0 ? (
+                            <p className="text-muted" style={{ fontSize: '0.78rem' }}>
+                              No messages returned. If the main API does not implement situation routes yet, only the DPAL app
+                              will show chat. Otherwise confirm the room id matches this report id.
+                            </p>
+                          ) : (
+                            [...(detail?.situationMessages || [])]
+                              .sort((a, b) => a.timestamp - b.timestamp)
+                              .map((m) => (
+                                <div
+                                  key={m.id}
+                                  style={{
+                                    padding: '0.5rem 0.65rem',
+                                    border: '1px solid var(--graphite-border)',
+                                    borderRadius: '6px',
+                                    fontSize: '0.78rem',
+                                    background: m.isSystem ? 'rgba(59, 130, 246, 0.08)' : 'var(--bg-elevated)',
+                                  }}
+                                >
+                                  <div className="mono" style={{ fontSize: '0.62rem', color: 'var(--silver-dim)' }}>
+                                    {m.sender} · {new Date(m.timestamp).toLocaleString()}
+                                  </div>
+                                  {m.text ? <div style={{ marginTop: '0.25rem', whiteSpace: 'pre-wrap' }}>{m.text}</div> : null}
+                                  {m.imageUrl ? (
+                                    <img
+                                      src={m.imageUrl}
+                                      alt=""
+                                      style={{ maxWidth: 'min(100%, 280px)', marginTop: '0.35rem', borderRadius: '4px' }}
+                                      loading="lazy"
+                                      referrerPolicy="no-referrer"
+                                    />
+                                  ) : null}
+                                </div>
+                              ))
+                          )}
+                        </div>
+                      </div>
+                    )}
+
                     {tab === 'routing' && (
                       <div style={{ marginTop: '1rem' }}>
                         <div className="section-title">Category routing (reference)</div>
@@ -989,9 +1095,8 @@ export function VerifierPortal() {
           </div>
 
           <p className="text-muted" style={{ fontSize: '0.72rem', marginTop: '1.5rem', maxWidth: '900px', lineHeight: 1.5 }}>
-            Privacy: verifiers should use report-scoped context only. Full situation-room chat is not shown here by design — use
-            report-linked threads and internal notes. Outbound actions are logged under <span className="mono">server/data/verifier-audit.json</span> until
-            you connect PostgreSQL/Mongo models.
+            Privacy: use the Situation chat tab for read-only context from the main API when available. Verifier notes and outbound
+            actions are logged under <span className="mono">server/data/verifier-audit.json</span> until you connect PostgreSQL/Mongo models.
           </p>
         </main>
       </div>
