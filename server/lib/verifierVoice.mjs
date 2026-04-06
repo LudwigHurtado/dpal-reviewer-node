@@ -89,28 +89,48 @@ export async function placeTwilioOutboundCall({ req, reportId, toPhone, actionId
     process.env.TWILIO_MACHINE_DETECTION?.trim() || 'Enable',
   );
 
-  const authUser = apiKeySid && apiKeySecret ? apiKeySid : sid;
-  const authPass = apiKeySid && apiKeySecret ? apiKeySecret : token;
-  const auth = Buffer.from(`${authUser}:${authPass}`).toString('base64');
-  const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Calls.json`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Basic ${auth}`,
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body,
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) return { ok: false, reason: 'twilio_call_failed', httpStatus: res.status, error: data };
+  const authModes = [];
+  if (apiKeySid && apiKeySecret) authModes.push({ mode: 'api_key', user: apiKeySid, pass: apiKeySecret });
+  if (token) authModes.push({ mode: 'auth_token', user: sid, pass: token });
+
+  const attempts = [];
+  for (const m of authModes) {
+    const auth = Buffer.from(`${m.user}:${m.pass}`).toString('base64');
+    const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Calls.json`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${auth}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok) {
+      return {
+        ok: true,
+        provider: 'twilio',
+        authMode: m.mode,
+        callSid: data.sid,
+        to: toPhone,
+        from,
+        answerUrl,
+        statusUrl,
+        reportContext,
+      };
+    }
+    attempts.push({
+      mode: m.mode,
+      httpStatus: res.status,
+      error: data,
+    });
+  }
+
   return {
-    ok: true,
-    provider: 'twilio',
-    callSid: data.sid,
-    to: toPhone,
-    from,
-    answerUrl,
-    statusUrl,
-    reportContext,
+    ok: false,
+    reason: 'twilio_call_failed',
+    attempts,
+    httpStatus: attempts[0]?.httpStatus,
+    error: attempts[0]?.error,
   };
 }
 

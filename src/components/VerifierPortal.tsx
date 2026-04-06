@@ -616,8 +616,8 @@ export function VerifierPortal() {
           }}
         >
           <img
-            src="/validator-portal-hero.png"
-            alt="DPAL Validator Portal — operations center for reviewing public reports"
+            src="/create-mission-main.png"
+            alt="DPAL Create a Mission — community support and coordination"
             width={1600}
             height={600}
             style={{
