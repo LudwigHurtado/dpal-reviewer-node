@@ -1,4 +1,4 @@
-import dotenv from 'dotenv';
+import './loadEnv.mjs';
 import express from 'express';
 import cors from 'cors';
 import fs from 'fs';
@@ -7,14 +7,12 @@ import { dirname, join } from 'path';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const projectRoot = join(__dirname, '..');
-dotenv.config({ path: join(projectRoot, '.env') });
-dotenv.config({ path: join(projectRoot, '.env.local'), override: true });
 
 import { fetchUpstreamReports, buildPublicReportUrl } from './lib/upstream.mjs';
 import { readReviews, upsertReview, ALLOWED_EFFECTS } from './lib/reviewsStore.mjs';
 import { createVerifierPortalRouter } from './verifierRoutes.mjs';
 import { getEmailConfigStatus } from './lib/verifierEmail.mjs';
+import { getVerifierAuditFilePath } from './lib/verifierAudit.mjs';
 
 const DATA_FILE = join(__dirname, 'data', 'dashboard.json');
 
@@ -177,12 +175,14 @@ app.get('/api/reviewer/v1/health', (_req, res) => {
     sseMs: SSE_INTERVAL_MS,
     verifierPortal: true,
     email: getEmailConfigStatus(),
+    verifierAuditPath: getVerifierAuditFilePath(),
   });
 });
 
 const HOST = process.env.HOST || '0.0.0.0';
 const server = app.listen(PORT, HOST, () => {
   console.log(`DPAL reviewer API listening on http://${HOST}:${PORT}`);
+  console.log(`  Verifier audit JSON: ${getVerifierAuditFilePath()} (mount a volume here on Railway or data resets on deploy)`);
   if (process.env.DPAL_UPSTREAM_URL) {
     console.log(
       `  Upstream reports: ${process.env.DPAL_UPSTREAM_URL}${process.env.DPAL_UPSTREAM_REPORTS_PATH || '/api/reports/feed'}`,
