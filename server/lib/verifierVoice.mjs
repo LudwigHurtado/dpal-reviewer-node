@@ -26,12 +26,19 @@ function twimlGatherResponse({ say, actionUrl, finish = false }) {
 }
 
 export function getVoiceConfigStatus() {
+  const hasApiKey =
+    Boolean(process.env.TWILIO_API_KEY_SID?.trim()) &&
+    Boolean(process.env.TWILIO_API_KEY_SECRET?.trim()) &&
+    Boolean(process.env.TWILIO_ACCOUNT_SID?.trim()) &&
+    Boolean(process.env.TWILIO_FROM_NUMBER?.trim());
   return {
     twilio: Boolean(
-      process.env.TWILIO_ACCOUNT_SID?.trim() &&
-        process.env.TWILIO_AUTH_TOKEN?.trim() &&
-        process.env.TWILIO_FROM_NUMBER?.trim(),
+      hasApiKey ||
+        (process.env.TWILIO_ACCOUNT_SID?.trim() &&
+          process.env.TWILIO_AUTH_TOKEN?.trim() &&
+          process.env.TWILIO_FROM_NUMBER?.trim()),
     ),
+    twilioAuthMode: hasApiKey ? 'api_key' : 'auth_token',
     webhookBaseSet: Boolean(process.env.VOICE_WEBHOOK_BASE_URL?.trim()),
   };
 }
@@ -59,8 +66,10 @@ function buildReportContext(report) {
 export async function placeTwilioOutboundCall({ req, reportId, toPhone, actionId, reportContext }) {
   const sid = process.env.TWILIO_ACCOUNT_SID?.trim();
   const token = process.env.TWILIO_AUTH_TOKEN?.trim();
+  const apiKeySid = process.env.TWILIO_API_KEY_SID?.trim();
+  const apiKeySecret = process.env.TWILIO_API_KEY_SECRET?.trim();
   const from = process.env.TWILIO_FROM_NUMBER?.trim();
-  if (!sid || !token || !from) {
+  if (!sid || !from || (!(apiKeySid && apiKeySecret) && !token)) {
     return { ok: false, reason: 'twilio_not_configured' };
   }
   const base = voiceWebhookBaseFromReq(req);
@@ -80,7 +89,9 @@ export async function placeTwilioOutboundCall({ req, reportId, toPhone, actionId
     process.env.TWILIO_MACHINE_DETECTION?.trim() || 'Enable',
   );
 
-  const auth = Buffer.from(`${sid}:${token}`).toString('base64');
+  const authUser = apiKeySid && apiKeySecret ? apiKeySid : sid;
+  const authPass = apiKeySid && apiKeySecret ? apiKeySecret : token;
+  const auth = Buffer.from(`${authUser}:${authPass}`).toString('base64');
   const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Calls.json`, {
     method: 'POST',
     headers: {
