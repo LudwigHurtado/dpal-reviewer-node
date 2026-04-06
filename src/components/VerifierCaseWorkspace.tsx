@@ -339,11 +339,20 @@ export function VerifierCaseWorkspace(props: {
                     message: emailBody,
                     html: `<p>${emailBody.replace(/</g, '&lt;')}</p>`,
                   });
-                  const d = res.delivery as { sent?: boolean; provider?: string; reason?: string; error?: unknown } | undefined;
+                  const d = res.delivery as {
+                    sent?: boolean;
+                    provider?: string;
+                    reason?: string;
+                    error?: unknown;
+                    errorSummary?: string;
+                  } | undefined;
                   if (d?.sent) {
                     setNotice(`Email sent via ${d.provider || 'mail'}.`);
                   } else {
-                    const detail = d?.reason || (d?.error != null ? JSON.stringify(d.error) : 'no provider');
+                    const detail =
+                      d?.errorSummary ||
+                      d?.reason ||
+                      (d?.error != null ? JSON.stringify(d.error) : 'no provider');
                     setNotice(`Not sent (${detail}). ${res.hint || 'Configure RESEND, SendGrid, or SMTP on the Reviewer API.'}`);
                   }
                 })

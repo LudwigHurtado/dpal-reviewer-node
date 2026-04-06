@@ -415,11 +415,21 @@ export function VerifierPortal() {
           destination_email: outboundEmail.trim() || undefined,
           subject: `DPAL verifier — ${selected?.title?.slice(0, 80) || 'Report'} (${selectedId})`,
         });
-        const d = res.delivery as { sent?: boolean; provider?: string; reason?: string; error?: unknown } | undefined;
+        const d = res.delivery as {
+          sent?: boolean;
+          provider?: string;
+          reason?: string;
+          error?: unknown;
+          errorSummary?: string;
+        } | undefined;
         if (d?.sent) {
           setNotice(`Email sent via ${d.provider || 'mail'}.`);
         } else if (kind === 'email' || kind === 'escalate-emergency' || kind === 'legal-referral') {
-          const detail = d?.reason || (d?.error != null ? JSON.stringify(d.error) : '') || 'unknown';
+          const detail =
+            d?.errorSummary ||
+            d?.reason ||
+            (d?.error != null ? JSON.stringify(d.error) : '') ||
+            'unknown';
           setNotice(
             outboundEmail.trim()
               ? `Email not delivered (${detail}). ${res.hint || 'Set RESEND_API_KEY, SENDGRID_API_KEY, or SMTP_* on the Reviewer API.'}`

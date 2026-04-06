@@ -1,7 +1,7 @@
 /**
  * Outbound email for the Validator API — tries providers in order until one succeeds:
- * 1) Resend (RESEND_API_KEY + VERIFIER_FROM_EMAIL)
- * 2) SendGrid (SENDGRID_API_KEY + VERIFIER_FROM_EMAIL)
+ * 1) Resend (RESEND_API_KEY + from: VERIFIER_FROM_EMAIL or RESEND_FROM / RESEND_FROM_EMAIL)
+ * 2) SendGrid (SENDGRID_API_KEY + same from vars)
  * 3) SMTP (SMTP_HOST + …) via nodemailer
  *
  * Resend testing: use VERIFIER_FROM_EMAIL=onboarding@resend.dev and send only to your Resend-account email
@@ -9,6 +9,18 @@
  */
 
 import nodemailer from 'nodemailer';
+
+/**
+ * From address for Resend/SendGrid. VERIFIER_FROM_EMAIL is canonical; Resend docs often use RESEND_FROM.
+ */
+function verifierFromEmail() {
+  return (
+    process.env.VERIFIER_FROM_EMAIL?.trim() ||
+    process.env.RESEND_FROM?.trim() ||
+    process.env.RESEND_FROM_EMAIL?.trim() ||
+    ''
+  );
+}
 
 function parseFrom(raw) {
   const s = String(raw || '').trim();
@@ -20,7 +32,7 @@ function parseFrom(raw) {
 
 async function sendViaResend({ to, subject, html, text }) {
   const key = process.env.RESEND_API_KEY?.trim();
-  const fromRaw = process.env.VERIFIER_FROM_EMAIL?.trim();
+  const fromRaw = verifierFromEmail();
   if (!key || !fromRaw) return { sent: false, skipped: true };
   const toList = Array.isArray(to) ? to : [to];
   const recipients = toList.map((e) => String(e).trim()).filter(Boolean);
@@ -49,7 +61,7 @@ async function sendViaResend({ to, subject, html, text }) {
 
 async function sendViaSendGrid({ to, subject, html, text }) {
   const key = process.env.SENDGRID_API_KEY?.trim();
-  const fromRaw = process.env.VERIFIER_FROM_EMAIL?.trim();
+  const fromRaw = verifierFromEmail();
   if (!key || !fromRaw) return { sent: false, skipped: true };
   const { name, email: fromEmail } = parseFrom(fromRaw);
   if (!fromEmail) return { sent: false, reason: 'invalid_from' };
@@ -97,7 +109,7 @@ async function sendViaSmtp({ to, subject, html, text }) {
   const user = process.env.SMTP_USER?.trim() || '';
   const pass = process.env.SMTP_PASS?.trim() || '';
   const secure = String(process.env.SMTP_SECURE || '').toLowerCase() === 'true' || port === 465;
-  const fromRaw = process.env.VERIFIER_FROM_EMAIL?.trim() || process.env.SMTP_FROM?.trim() || user;
+  const fromRaw = verifierFromEmail() || process.env.SMTP_FROM?.trim() || user;
   if (!fromRaw) return { sent: false, reason: 'set_VERIFIER_FROM_EMAIL_or_SMTP_FROM' };
 
   const toList = Array.isArray(to) ? to : [to];
@@ -127,7 +139,7 @@ async function sendViaSmtp({ to, subject, html, text }) {
 export async function sendVerifierEmail({ to, subject, html, text }) {
   const attempts = [];
 
-  if (process.env.RESEND_API_KEY?.trim() && process.env.VERIFIER_FROM_EMAIL?.trim()) {
+  if (process.env.RESEND_API_KEY?.trim() && verifierFromEmail()) {
     try {
       const r = await sendViaResend({ to, subject, html, text });
       if (r.sent) return r;
@@ -137,7 +149,7 @@ export async function sendVerifierEmail({ to, subject, html, text }) {
     }
   }
 
-  if (process.env.SENDGRID_API_KEY?.trim() && process.env.VERIFIER_FROM_EMAIL?.trim()) {
+  if (process.env.SENDGRID_API_KEY?.trim() && verifierFromEmail()) {
     try {
       const r = await sendViaSendGrid({ to, subject, html, text });
       if (r.sent) return r;
@@ -161,10 +173,23 @@ export async function sendVerifierEmail({ to, subject, html, text }) {
     Boolean(process.env.RESEND_API_KEY?.trim()) ||
     Boolean(process.env.SENDGRID_API_KEY?.trim()) ||
     Boolean(process.env.SMTP_HOST?.trim());
+
+  let errorSummary;
+  for (const a of attempts) {
+    if (a?.error != null) {
+      errorSummary = typeof a.error === 'object' ? JSON.stringify(a.error) : String(a.error);
+      break;
+    }
+    if (a?.httpStatus) {
+      errorSummary = `HTTP ${a.httpStatus}`;
+    }
+  }
+
   return {
     sent: false,
     reason: configured ? 'all_providers_failed' : 'no_mailer_configured',
     attempts,
+    errorSummary,
   };
 }
 
@@ -177,10 +202,11 @@ export async function sendEmailIfConfigured(payload) {
  * Non-secret diagnostics for health/debug (which providers have env set).
  */
 export function getEmailConfigStatus() {
+  const from = verifierFromEmail();
   return {
-    resend: Boolean(process.env.RESEND_API_KEY?.trim() && process.env.VERIFIER_FROM_EMAIL?.trim()),
-    sendgrid: Boolean(process.env.SENDGRID_API_KEY?.trim() && process.env.VERIFIER_FROM_EMAIL?.trim()),
+    resend: Boolean(process.env.RESEND_API_KEY?.trim() && from),
+    sendgrid: Boolean(process.env.SENDGRID_API_KEY?.trim() && from),
     smtp: Boolean(process.env.SMTP_HOST?.trim()),
-    fromSet: Boolean(process.env.VERIFIER_FROM_EMAIL?.trim()),
+    fromSet: Boolean(from),
   };
 }
