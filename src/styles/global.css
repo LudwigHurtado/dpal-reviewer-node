@@ -53,6 +53,17 @@ button {
   cursor: pointer;
 }
 
+/* Keep dropdown text readable across browser/OS theme combinations. */
+select {
+  color: var(--white-soft);
+  background-color: var(--bg-panel);
+}
+
+select option {
+  color: #111827;
+  background-color: #ffffff;
+}
+
 a {
   color: var(--blue-highlight);
   text-decoration: none;
