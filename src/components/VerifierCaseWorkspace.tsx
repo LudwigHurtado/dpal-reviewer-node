@@ -5,7 +5,6 @@ import {
   patchVerifierCase,
   postAccountability,
   postAiTriage,
-  postCallScript,
   postCloseCase,
   postDisposition,
   postOutboundAction,
@@ -56,7 +55,8 @@ export function VerifierCaseWorkspace(props: {
   const { reportId, caseState, meta, priorActions, useDemo, onRefresh, setNotice } = props;
   const [busy, setBusy] = useState(false);
   const [triage, setTriage] = useState<VerifierAiTriage | null>(null);
-  const [callScript, setCallScript] = useState<string | null>(null);
+  const emailCardRef = useRef<HTMLDivElement | null>(null);
+  const emailToRef = useRef<HTMLInputElement | null>(null);
 
   const [assignV, setAssignV] = useState(caseState?.assignedVerifier ?? '');
   const [assignS, setAssignS] = useState(caseState?.assignedSupervisor ?? '');
@@ -234,7 +234,7 @@ export function VerifierCaseWorkspace(props: {
 
       {/* AI */}
       <div style={{ marginTop: '0.85rem' }}>
-        <div className="section-title" style={{ fontSize: '0.78rem' }}>AI triage (recommended next action)</div>
+        <div className="section-title" style={{ fontSize: '0.78rem' }}>AI evaluation (report-specific recommendations)</div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.4rem' }}>
           <button
             type="button"
@@ -245,26 +245,11 @@ export function VerifierCaseWorkspace(props: {
               void run(async () => {
                 const r = await postAiTriage(reportId);
                 setTriage(r.triage);
-                setNotice('AI triage ready — review summary and drafts below.');
+                setNotice('AI evaluation ready — review suggestions and recommended actions below.');
               })
             }
           >
-            Run AI triage
-          </button>
-          <button
-            type="button"
-            className="btn"
-            style={{ fontSize: '0.72rem' }}
-            disabled={busy}
-            onClick={() =>
-              void run(async () => {
-                const r = await postCallScript(reportId);
-                setCallScript(r.script);
-                setNotice('Call script generated.');
-              })
-            }
-          >
-            Generate call script
+            Evaluate this report with AI
           </button>
         </div>
         {triage && (
@@ -291,11 +276,80 @@ export function VerifierCaseWorkspace(props: {
             <div style={{ marginTop: '0.35rem' }}>
               <strong>Missing</strong> · {(triage.missing_info || []).join(', ') || '—'}
             </div>
+            {triage.quality_issues?.length ? (
+              <div style={{ marginTop: '0.35rem' }}>
+                <strong>Quality flags</strong> · {triage.quality_issues.join(', ')}
+              </div>
+            ) : null}
+            {triage.remediation_suggestions?.length ? (
+              <div style={{ marginTop: '0.35rem' }}>
+                <strong>Fix suggestions</strong>
+                <ul style={{ margin: '0.25rem 0 0 1rem', padding: 0 }}>
+                  {triage.remediation_suggestions.map((s, i) => (
+                    <li key={`${s}-${i}`}>{s}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            {triage.reporter_follow_up_needed ? (
+              <div style={{ marginTop: '0.35rem' }}>
+                <strong>Reporter follow-up needed</strong> · Contact user to clarify details before escalation.
+              </div>
+            ) : null}
             <div style={{ marginTop: '0.35rem' }}>
               <strong>Why</strong> · {triage.why_recommended}
             </div>
+            {triage.quest_steps?.length ? (
+              <div style={{ marginTop: '0.45rem' }}>
+                <strong>AI suggested plan</strong>
+                <ol style={{ margin: '0.35rem 0 0 1rem', padding: 0 }}>
+                  {triage.quest_steps.map((step, idx) => (
+                    <li key={`${step}-${idx}`} style={{ marginBottom: '0.2rem' }}>
+                      {step}
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            ) : null}
+            {triage.agency_drafts?.length ? (
+              <div style={{ marginTop: '0.45rem' }}>
+                <strong>Suggested agencies and outreach focus</strong>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', marginTop: '0.35rem' }}>
+                  {triage.agency_drafts.slice(0, 4).map((draft, idx) => (
+                    <div
+                      key={`${draft.agency}-${idx}`}
+                      style={{
+                        border: '1px solid var(--graphite-border)',
+                        borderRadius: '6px',
+                        padding: '0.35rem 0.45rem',
+                      }}
+                    >
+                      <div style={{ fontWeight: 600 }}>{draft.agency}</div>
+                      {draft.subject ? <div className="text-muted">Subject: {draft.subject}</div> : null}
+                      <div style={{ marginTop: '0.2rem' }}>
+                        <button
+                          type="button"
+                          className="btn"
+                          style={{ fontSize: '0.66rem' }}
+                          onClick={() => {
+                            setEmailTo((v) => v || '');
+                            setEmailSubj(draft.subject || '');
+                            setEmailBody(draft.body || '');
+                            setNotice('Draft copied into Email city/agency form below.');
+                            emailCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            window.setTimeout(() => emailToRef.current?.focus(), 80);
+                          }}
+                        >
+                          Use in email form
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
             <details style={{ marginTop: '0.5rem' }}>
-              <summary style={{ cursor: 'pointer' }}>Draft email</summary>
+              <summary style={{ cursor: 'pointer' }}>AI draft email</summary>
               <pre
                 style={{
                   whiteSpace: 'pre-wrap',
@@ -307,24 +361,6 @@ export function VerifierCaseWorkspace(props: {
                 {triage.draft_email}
               </pre>
             </details>
-          </div>
-        )}
-        {callScript && (
-          <div style={{ marginTop: '0.5rem' }}>
-            <div className="section-title" style={{ fontSize: '0.72rem' }}>Call script</div>
-            <pre
-              style={{
-                whiteSpace: 'pre-wrap',
-                fontSize: '0.72rem',
-                padding: '0.5rem',
-                borderRadius: '6px',
-                border: '1px solid var(--graphite-border)',
-                maxHeight: '200px',
-                overflow: 'auto',
-              }}
-            >
-              {callScript}
-            </pre>
           </div>
         )}
       </div>
@@ -426,9 +462,9 @@ export function VerifierCaseWorkspace(props: {
       <div style={{ marginTop: '1.1rem' }}>
         <div className="section-title" style={{ fontSize: '0.78rem' }}>Outside action</div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginTop: '0.5rem' }}>
-          <div style={{ border: '1px solid var(--graphite-border)', borderRadius: '8px', padding: '0.6rem' }}>
+          <div ref={emailCardRef} style={{ border: '1px solid var(--graphite-border)', borderRadius: '8px', padding: '0.6rem' }}>
             <div style={{ fontSize: '0.72rem', fontWeight: 600 }}>Email city / agency</div>
-            <input placeholder="to@agency.gov" value={emailTo} onChange={(e) => setEmailTo(e.target.value)} style={{ ...inputStyle, marginTop: '0.35rem' }} />
+            <input ref={emailToRef} placeholder="to@agency.gov" value={emailTo} onChange={(e) => setEmailTo(e.target.value)} style={{ ...inputStyle, marginTop: '0.35rem' }} />
             <input placeholder="Subject" value={emailSubj} onChange={(e) => setEmailSubj(e.target.value)} style={{ ...inputStyle, marginTop: '0.35rem' }} />
             <textarea placeholder="Message" value={emailBody} onChange={(e) => setEmailBody(e.target.value)} rows={4} style={{ ...inputStyle, marginTop: '0.35rem' }} />
             <button
@@ -476,8 +512,30 @@ export function VerifierCaseWorkspace(props: {
             <textarea placeholder="Summary of call" value={phoneSummary} onChange={(e) => setPhoneSummary(e.target.value)} rows={3} style={{ ...inputStyle, marginTop: '0.35rem' }} />
             <button
               type="button"
-              className="btn"
+              className="btn btn-primary"
               style={{ fontSize: '0.7rem', marginTop: '0.35rem' }}
+              disabled={busy}
+              onClick={() =>
+                void run(async () => {
+                  if (!phoneNum.trim()) {
+                    setNotice('Enter a phone number first for outbound AI call.');
+                    return;
+                  }
+                  const out = await postOutboundAction(reportId, 'call-outbound', {
+                    to_phone: phoneNum.trim(),
+                    summary: phoneSummary || 'Outbound DPAL AI support call',
+                  });
+                  const sid = (out as { call?: { callSid?: string } }).call?.callSid;
+                  setNotice(`Outbound AI call started${sid ? ` (SID: ${sid})` : ''}.`);
+                })
+              }
+            >
+              Place AI call
+            </button>
+            <button
+              type="button"
+              className="btn"
+              style={{ fontSize: '0.7rem', marginTop: '0.35rem', marginLeft: '0.35rem' }}
               disabled={busy}
               onClick={() =>
                 void run(async () => {

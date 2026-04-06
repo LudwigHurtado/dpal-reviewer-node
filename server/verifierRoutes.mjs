@@ -26,6 +26,13 @@ import {
 } from './lib/verifierUpstreamSync.mjs';
 import { sendVerifierEmail, getEmailConfigStatus } from './lib/verifierEmail.mjs';
 import { runVerifierAiTriage, generateCallScript } from './lib/verifierAiTriage.mjs';
+import {
+  placeTwilioOutboundCall,
+  buildInitialVoiceTwiml,
+  buildNextVoiceTwiml,
+  generateVoiceAiTurn,
+  buildReportContext,
+} from './lib/verifierVoice.mjs';
 
 const DISPOSITIONS = new Set([
   'under_review',
@@ -462,6 +469,173 @@ export function createVerifierPortalRouter() {
       return res.json({ ok: true, action: entry });
     } catch (e) {
       return res.status(500).json({ ok: false, error: String(e?.message || e) });
+    }
+  });
+
+  /** Place real outbound call via Twilio and hand over to AI webhook flow. */
+  router.post('/reports/:reportId/actions/call-outbound', async (req, res) => {
+    try {
+      const reportId = decodeURIComponent(req.params.reportId || '').trim();
+      const who = getVerifierIdentity(req);
+      const b = req.body || {};
+      const toPhone = String(b.to_phone || b.destination_phone || '').trim();
+      if (!toPhone) return res.status(400).json({ ok: false, error: 'missing_to_phone' });
+
+      const doc = await fetchUpstreamReportById(reportId);
+      if (!doc || doc.error) return res.status(404).json({ ok: false, error: 'report_not_found' });
+      const p = doc.payload && typeof doc.payload === 'object' ? doc.payload : doc;
+      const report = {
+        id: doc.id || reportId,
+        title: p.title ?? doc.title,
+        description: p.description ?? doc.description,
+        category: p.category ?? doc.category,
+        location: p.location ?? doc.location,
+        status: doc.lifecycleState,
+      };
+      const entry = logAction(reportId, {
+        actionType: 'voice_call_outbound',
+        label: 'Outbound AI voice call',
+        destination_phone: toPhone,
+        summary: String(b.summary || b.message || ''),
+        performed_by: who,
+        status: 'initiating',
+        recorded_at: new Date().toISOString(),
+      });
+
+      const placed = await placeTwilioOutboundCall({
+        req,
+        reportId,
+        toPhone,
+        actionId: entry.id,
+        reportContext: buildReportContext(report),
+      });
+      if (!placed.ok) {
+        updateActionEntry(entry.id, {
+          status: 'call_failed',
+          call_error: placed.reason,
+          call_error_detail: placed.error || placed.httpStatus,
+        });
+        return res.status(502).json({ ok: false, error: placed.reason, detail: placed.error || placed.httpStatus });
+      }
+
+      const action = updateActionEntry(entry.id, {
+        status: 'dialing',
+        call_provider: placed.provider,
+        call_sid: placed.callSid,
+        destination_phone: placed.to,
+      });
+      return res.json({ ok: true, action, call: placed });
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: String(e?.message || e) });
+    }
+  });
+
+  /** Twilio answers call and asks initial question. */
+  router.all('/voice/twilio/answer', async (req, res) => {
+    try {
+      const reportId = decodeURIComponent(String(req.query.reportId || '')).trim();
+      const actionId = decodeURIComponent(String(req.query.actionId || '')).trim();
+      const doc = await fetchUpstreamReportById(reportId);
+      const p = doc?.payload && typeof doc.payload === 'object' ? doc.payload : doc || {};
+      const report = {
+        id: doc?.id || reportId,
+        title: p.title ?? doc?.title,
+        description: p.description ?? doc?.description,
+        category: p.category ?? doc?.category,
+        location: p.location ?? doc?.location,
+        status: doc?.lifecycleState,
+      };
+      if (actionId) {
+        updateActionEntry(actionId, {
+          status: 'in_progress',
+          call_started_at: new Date().toISOString(),
+        });
+      }
+      const xml = buildInitialVoiceTwiml({ report, reportId, actionId, req });
+      res.type('text/xml').send(xml);
+    } catch (e) {
+      res.type('text/xml').send('<?xml version="1.0" encoding="UTF-8"?><Response><Say>Call setup error. Please try again later.</Say><Hangup/></Response>');
+    }
+  });
+
+  /** Twilio gather callback: process caller speech and continue/finish. */
+  router.post('/voice/twilio/gather', async (req, res) => {
+    try {
+      const reportId = decodeURIComponent(String(req.query.reportId || '')).trim();
+      const actionId = decodeURIComponent(String(req.query.actionId || '')).trim();
+      const speech = String(req.body?.SpeechResult || req.body?.Digits || '').trim();
+      const prior = getActionsForReport(reportId).find((a) => a.id === actionId) || {};
+      const turns = Array.isArray(prior.voice_turns) ? [...prior.voice_turns] : [];
+      if (speech) turns.push({ role: 'caller', text: speech, at: new Date().toISOString() });
+
+      const doc = await fetchUpstreamReportById(reportId);
+      const p = doc?.payload && typeof doc.payload === 'object' ? doc.payload : doc || {};
+      const report = {
+        id: doc?.id || reportId,
+        title: p.title ?? doc?.title,
+        description: p.description ?? doc?.description,
+        category: p.category ?? doc?.category,
+        location: p.location ?? doc?.location,
+        status: doc?.lifecycleState,
+      };
+      const ai = await generateVoiceAiTurn({
+        reportContext: buildReportContext(report),
+        userText: speech,
+        turnIndex: turns.length,
+      });
+      turns.push({ role: 'agent', text: ai.reply, at: new Date().toISOString(), mode: ai.mode });
+
+      if (actionId) {
+        updateActionEntry(actionId, {
+          status: ai.done ? 'completed' : 'in_progress',
+          voice_turns: turns,
+          call_summary: ai.summary || prior.call_summary || '',
+          reporter_follow_up_needed: Boolean(ai.followUpNeeded),
+          response_summary: ai.done ? ai.summary || prior.response_summary : prior.response_summary,
+        });
+      }
+      const xml = buildNextVoiceTwiml({
+        req,
+        reportId,
+        actionId,
+        reply: ai.reply,
+        done: ai.done || turns.length >= 8,
+      });
+      res.type('text/xml').send(xml);
+    } catch (e) {
+      res
+        .type('text/xml')
+        .send('<?xml version="1.0" encoding="UTF-8"?><Response><Say>We could not process your response. A verifier will follow up.</Say><Hangup/></Response>');
+    }
+  });
+
+  /** Twilio status callback for tracking final call state. */
+  router.post('/voice/twilio/status', (req, res) => {
+    try {
+      const reportId = decodeURIComponent(String(req.query.reportId || '')).trim();
+      const actionId = decodeURIComponent(String(req.query.actionId || '')).trim();
+      const callStatus = String(req.body?.CallStatus || '').trim();
+      const sid = String(req.body?.CallSid || '').trim();
+      const duration = String(req.body?.CallDuration || '').trim();
+      if (actionId) {
+        updateActionEntry(actionId, {
+          call_sid: sid || undefined,
+          call_status: callStatus || undefined,
+          duration_seconds: duration ? Number(duration) : undefined,
+          status: callStatus === 'completed' ? 'completed' : callStatus || 'updated',
+          call_completed_at: callStatus === 'completed' ? new Date().toISOString() : undefined,
+        });
+      } else if (reportId) {
+        logAction(reportId, {
+          actionType: 'voice_status',
+          label: 'Voice call status',
+          summary: `${callStatus}${sid ? ` (${sid})` : ''}`,
+          recorded_at: new Date().toISOString(),
+        });
+      }
+      return res.status(204).send('');
+    } catch {
+      return res.status(204).send('');
     }
   });
 

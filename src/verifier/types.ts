@@ -37,6 +37,9 @@ export interface VerifierAiTriage {
   draft_call_summary: string;
   why_recommended: string;
   category_suggestion?: string;
+  quality_issues?: string[];
+  remediation_suggestions?: string[];
+  reporter_follow_up_needed?: boolean;
   quest_steps?: string[];
   agency_drafts?: Array<{
     agency: string;

@@ -171,6 +171,44 @@ function buildAgencyDrafts(categoryKey, payload) {
   return packs[categoryKey] || packs.public_safety;
 }
 
+function evaluateReportQuality({ title, description, category }) {
+  const text = `${title || ''} ${description || ''}`.toLowerCase().trim();
+  const issues = [];
+  const suggestions = [];
+  let followUp = false;
+
+  if (text.length < 40) {
+    issues.push('report_too_short');
+    suggestions.push('Ask reporter for a fuller narrative: what happened, where, when, and who was involved.');
+    followUp = true;
+  }
+  if (!/[.!?]/.test(String(description || '')) && String(description || '').length < 120) {
+    issues.push('limited_context');
+    suggestions.push('Request clearer sentence-level details and chronological order of events.');
+    followUp = true;
+  }
+  if (!/where|location|street|ave|road|st|near|at|inside/.test(text)) {
+    issues.push('unclear_location_context');
+    suggestions.push('Contact reporter to confirm exact location and landmarks.');
+    followUp = true;
+  }
+
+  const inferred = normalizeCategoryKey(text);
+  const provided = normalizeCategoryKey(category);
+  if (provided && inferred && provided !== inferred) {
+    issues.push('possible_category_mismatch');
+    suggestions.push(`Review category: current "${category}" may fit better as "${inferred}".`);
+  }
+
+  if (!followUp && issues.length === 0) {
+    suggestions.push('Report appears coherent; proceed with agency routing and accountability timeline.');
+  } else if (followUp) {
+    suggestions.push('Before escalation, contact reporter and help them fix/complete the report details.');
+  }
+
+  return { issues, suggestions, followUp };
+}
+
 function heuristicTriage({ title, description, category, location, evidenceCount, reportId }) {
   const text = `${title || ''} ${description || ''}`.toLowerCase();
   const missing = [];
@@ -193,6 +231,7 @@ function heuristicTriage({ title, description, category, location, evidenceCount
   if (/wage|osha|workplace|retaliation/.test(text)) destination = 'Labor department or worker center';
 
   const categoryKey = normalizeCategoryKey(category);
+  const quality = evaluateReportQuality({ title, description, category });
   return {
     summary: `${title || 'Report'} — ${String(description || '').slice(0, 280)}${String(description || '').length > 280 ? '…' : ''}`,
     urgency,
@@ -203,6 +242,9 @@ function heuristicTriage({ title, description, category, location, evidenceCount
     draft_call_summary: `Introduce the case, cite location (${location || 'see report'}), describe the hazard or concern, request timely response and reference ID.`,
     why_recommended: 'Heuristic triage (set OPENAI_API_KEY on the Reviewer API for richer AI output).',
     category_suggestion: category || 'General',
+    quality_issues: quality.issues,
+    remediation_suggestions: quality.suggestions,
+    reporter_follow_up_needed: quality.followUp,
     quest_steps: buildCategoryQuest(categoryKey),
     agency_drafts: buildAgencyDrafts(categoryKey, { title, description, location, reportId }),
     mode: 'heuristic',
@@ -230,7 +272,8 @@ export async function runVerifierAiTriage(input) {
 summary (string), urgency (one of: low, medium, high, urgent), credibility_estimate (number 0-100),
 destination (string), missing_info (array of short codes like missing_address),
 draft_email (string), draft_call_summary (string), why_recommended (string),
-category_suggestion (string), quest_steps (array of strings), agency_drafts (array of objects with keys agency, channel, subject, body).`;
+category_suggestion (string), quality_issues (array of short strings), remediation_suggestions (array of strings),
+reporter_follow_up_needed (boolean), quest_steps (array of strings), agency_drafts (array of objects with keys agency, channel, subject, body).`;
 
   const user = JSON.stringify(payload);
 
@@ -278,6 +321,11 @@ category_suggestion (string), quest_steps (array of strings), agency_drafts (arr
       draft_call_summary: String(parsed.draft_call_summary || ''),
       why_recommended: String(parsed.why_recommended || ''),
       category_suggestion: String(parsed.category_suggestion || payload.category),
+      quality_issues: Array.isArray(parsed.quality_issues) ? parsed.quality_issues.map((s) => String(s).slice(0, 120)) : [],
+      remediation_suggestions: Array.isArray(parsed.remediation_suggestions)
+        ? parsed.remediation_suggestions.map((s) => String(s).slice(0, 280))
+        : evaluateReportQuality(payload).suggestions,
+      reporter_follow_up_needed: Boolean(parsed.reporter_follow_up_needed),
       quest_steps: Array.isArray(parsed.quest_steps) ? parsed.quest_steps.map((s) => String(s).slice(0, 280)) : buildCategoryQuest(categoryKey),
       agency_drafts: parsedDrafts.length > 0 ? parsedDrafts : buildAgencyDrafts(categoryKey, payload),
       mode: 'openai',

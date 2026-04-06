@@ -159,6 +159,7 @@ export function VerifierPortal() {
   const [aiBusy, setAiBusy] = useState(false);
   /** Required for real email delivery (API has no recipient otherwise). */
   const [outboundEmail, setOutboundEmail] = useState('');
+  const [outboundPhone, setOutboundPhone] = useState('');
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -416,6 +417,8 @@ export function VerifierPortal() {
       const kind =
         actionType === 'email_city'
           ? 'email'
+          : actionType === 'ai_call'
+            ? 'call-outbound'
           : actionType === 'emergency_dispatch'
             ? 'escalate-emergency'
             : actionType === 'legal_referral'
@@ -428,11 +431,17 @@ export function VerifierPortal() {
       if (useDemo) {
         setNotice('Demo mode — action not sent. Configure upstream + mail/call providers for production.');
       } else {
+        if (kind === 'call-outbound' && !outboundPhone.trim()) {
+          setNotice('Enter a destination phone number to place an AI call.');
+          return;
+        }
         const res = await postOutboundAction(selectedId, kind, {
           message: actionMessage,
           summary: actionMessage,
           destination_name: playbook?.agencies[0],
           destination_email: outboundEmail.trim() || undefined,
+          destination_phone: outboundPhone.trim() || undefined,
+          to_phone: outboundPhone.trim() || undefined,
           subject: `DPAL verifier — ${selected?.title?.slice(0, 80) || 'Report'} (${selectedId})`,
         });
         const d = res.delivery as {
@@ -456,7 +465,12 @@ export function VerifierPortal() {
               : 'Enter a recipient email above — the server cannot send without a To: address.',
           );
         } else {
-          setNotice(res.warning || res.hint || 'Action logged in verifier audit file.');
+          if (kind === 'call-outbound') {
+            const sid = (res as { call?: { callSid?: string } }).call?.callSid;
+            setNotice(`Outbound AI call started${sid ? ` (SID: ${sid})` : ''}.`);
+          } else {
+            setNotice(res.warning || res.hint || 'Action logged in verifier audit file.');
+          }
         }
         await loadDetail(selectedId);
       }
@@ -1059,6 +1073,7 @@ export function VerifierPortal() {
                             }}
                           >
                             <option value="call">Call agency</option>
+                            <option value="ai_call">Place AI call (voice agent)</option>
                             <option value="email_city">Email city / department</option>
                             <option value="emergency_dispatch">Emergency escalation</option>
                             <option value="non_emergency">Non-emergency dispatch</option>
@@ -1073,6 +1088,25 @@ export function VerifierPortal() {
                               onChange={(e) => setOutboundEmail(e.target.value)}
                               placeholder="agency@city.gov, inspector@county.gov"
                               autoComplete="email"
+                              style={{
+                                width: '100%',
+                                marginTop: '0.3rem',
+                                padding: '0.45rem',
+                                background: 'var(--bg-deep)',
+                                border: '1px solid var(--graphite-border)',
+                                color: 'var(--white)',
+                                borderRadius: '6px',
+                              }}
+                            />
+                          </label>
+                          <label style={{ display: 'block', marginTop: '0.65rem', fontSize: '0.75rem', color: 'var(--silver-dim)' }}>
+                            Destination phone (required for AI call)
+                            <input
+                              type="tel"
+                              value={outboundPhone}
+                              onChange={(e) => setOutboundPhone(e.target.value)}
+                              placeholder="+1XXXXXXXXXX"
+                              autoComplete="tel"
                               style={{
                                 width: '100%',
                                 marginTop: '0.3rem',

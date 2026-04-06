@@ -192,6 +192,7 @@ export async function postRequestEvidence(reportId: string, message: string): Pr
 
 export type OutboundKind =
   | 'call'
+  | 'call-outbound'
   | 'email'
   | 'escalate'
   | 'legal-referral'
@@ -209,6 +210,7 @@ export async function postOutboundAction(
   const id = encodeURIComponent(reportId);
   const pathMap: Record<OutboundKind, string> = {
     call: 'call',
+    'call-outbound': 'call-outbound',
     email: 'email',
     escalate: 'escalate',
     'legal-referral': 'legal-referral',

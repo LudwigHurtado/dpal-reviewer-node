@@ -13,6 +13,7 @@ import { readReviews, upsertReview, ALLOWED_EFFECTS } from './lib/reviewsStore.m
 import { createVerifierPortalRouter } from './verifierRoutes.mjs';
 import { getEmailConfigStatus } from './lib/verifierEmail.mjs';
 import { getVerifierAuditFilePath } from './lib/verifierAudit.mjs';
+import { getVoiceConfigStatus } from './lib/verifierVoice.mjs';
 
 const DATA_FILE = join(__dirname, 'data', 'dashboard.json');
 
@@ -64,6 +65,7 @@ const app = express();
 app.set('trust proxy', 1);
 app.use(cors({ origin: true }));
 app.use(express.json({ limit: '2mb' }));
+app.use(express.urlencoded({ extended: false }));
 
 /** Root — valid JSON so opening the Railway URL in a browser is not an empty/invalid HTTP response. */
 app.get('/', (_req, res) => {
@@ -175,6 +177,7 @@ app.get('/api/reviewer/v1/health', (_req, res) => {
     sseMs: SSE_INTERVAL_MS,
     verifierPortal: true,
     email: getEmailConfigStatus(),
+    voice: getVoiceConfigStatus(),
     verifierAuditPath: getVerifierAuditFilePath(),
   });
 });
