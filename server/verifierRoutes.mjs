@@ -354,6 +354,7 @@ export function createVerifierPortalRouter() {
       const p = doc.payload && typeof doc.payload === 'object' ? doc.payload : doc;
       const mergedUrls = collectImageUrlStringsFromReportShape(doc);
       const triage = await runVerifierAiTriage({
+        reportId,
         title: p.title ?? doc.title,
         description: p.description ?? doc.description,
         category: p.category ?? doc.category,
@@ -437,7 +438,7 @@ export function createVerifierPortalRouter() {
         delivery,
         hint: delivery.sent
           ? undefined
-          : 'Configure email: RESEND_API_KEY+VERIFIER_FROM_EMAIL, or SENDGRID_API_KEY+VERIFIER_FROM_EMAIL, or SMTP_HOST+SMTP_USER+SMTP_PASS. Test Resend with VERIFIER_FROM_EMAIL=onboarding@resend.dev and send only to your account email.',
+          : 'Configure email: RESEND_API_KEY+VERIFIER_FROM_EMAIL, or SENDGRID_API_KEY+VERIFIER_FROM_EMAIL, or SMTP_HOST+SMTP_USER+SMTP_PASS. For delivery to any recipient, use a verified sender/domain in your mail provider.',
       });
     } catch (e) {
       return res.status(500).json({ ok: false, error: String(e?.message || e) });

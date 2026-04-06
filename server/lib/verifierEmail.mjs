@@ -4,8 +4,8 @@
  * 2) SendGrid (SENDGRID_API_KEY + same from vars)
  * 3) SMTP (SMTP_HOST + …) via nodemailer
  *
- * Resend testing: use VERIFIER_FROM_EMAIL=onboarding@resend.dev and send only to your Resend-account email
- * until a domain is verified.
+ * For unrestricted delivery to any recipient, configure a verified sender/domain in your provider
+ * (Resend/SendGrid/SMTP).
  */
 
 import nodemailer from 'nodemailer';
@@ -30,12 +30,30 @@ function parseFrom(raw) {
   return { name: '', email: '' };
 }
 
+function normalizeRecipients(to) {
+  const toList = Array.isArray(to) ? to : [to];
+  const out = [];
+  const seen = new Set();
+  for (const raw of toList) {
+    const parts = String(raw || '')
+      .split(/[;,]/g)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    for (const email of parts) {
+      const key = email.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(email);
+    }
+  }
+  return out;
+}
+
 async function sendViaResend({ to, subject, html, text }) {
   const key = process.env.RESEND_API_KEY?.trim();
   const fromRaw = verifierFromEmail();
   if (!key || !fromRaw) return { sent: false, skipped: true };
-  const toList = Array.isArray(to) ? to : [to];
-  const recipients = toList.map((e) => String(e).trim()).filter(Boolean);
+  const recipients = normalizeRecipients(to);
   if (recipients.length === 0) return { sent: false, reason: 'no_recipients' };
 
   const res = await fetch('https://api.resend.com/emails', {
@@ -65,8 +83,7 @@ async function sendViaSendGrid({ to, subject, html, text }) {
   if (!key || !fromRaw) return { sent: false, skipped: true };
   const { name, email: fromEmail } = parseFrom(fromRaw);
   if (!fromEmail) return { sent: false, reason: 'invalid_from' };
-  const toList = Array.isArray(to) ? to : [to];
-  const recipients = toList.map((e) => String(e).trim()).filter(Boolean);
+  const recipients = normalizeRecipients(to);
   if (recipients.length === 0) return { sent: false, reason: 'no_recipients' };
 
   const content = [];
@@ -112,8 +129,7 @@ async function sendViaSmtp({ to, subject, html, text }) {
   const fromRaw = verifierFromEmail() || process.env.SMTP_FROM?.trim() || user;
   if (!fromRaw) return { sent: false, reason: 'set_VERIFIER_FROM_EMAIL_or_SMTP_FROM' };
 
-  const toList = Array.isArray(to) ? to : [to];
-  const recipients = toList.map((e) => String(e).trim()).filter(Boolean);
+  const recipients = normalizeRecipients(to);
   if (recipients.length === 0) return { sent: false, reason: 'no_recipients' };
 
   const transporter = nodemailer.createTransport({

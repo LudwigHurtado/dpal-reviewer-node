@@ -37,6 +37,13 @@ export interface VerifierAiTriage {
   draft_call_summary: string;
   why_recommended: string;
   category_suggestion?: string;
+  quest_steps?: string[];
+  agency_drafts?: Array<{
+    agency: string;
+    channel?: string;
+    subject?: string;
+    body: string;
+  }>;
   mode?: string;
 }
 

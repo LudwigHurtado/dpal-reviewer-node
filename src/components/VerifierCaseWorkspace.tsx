@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import type { VerifierAiTriage, VerifierCaseState, VerifierDetailMeta, VerifierDisposition } from '../verifier/types';
 import {
@@ -11,6 +11,8 @@ import {
   postOutboundAction,
   postPhoneLog,
 } from '../api/verifierClient';
+
+const DRAFT_KEY_PREFIX = 'dpal_verifier_workspace_draft:';
 
 const DISPOSITION_LABELS: Record<string, string> = {
   under_review: 'Under review',
@@ -30,13 +32,16 @@ type PriorAction = {
   actionType?: string;
   label?: string;
   at?: string;
+  recorded_at?: string;
   performed_by?: string;
   destination_email?: string;
   destination_name?: string;
   summary?: string;
   sent_at?: string;
+  response_recorded_at?: string;
   response_summary?: string;
   resolution?: string;
+  no_action_reason?: string;
 };
 
 export function VerifierCaseWorkspace(props: {
@@ -57,6 +62,7 @@ export function VerifierCaseWorkspace(props: {
   const [assignS, setAssignS] = useState(caseState?.assignedSupervisor ?? '');
   const [deadline, setDeadline] = useState(caseState?.deadline ?? '');
   const [redact, setRedact] = useState(caseState?.redactionNotes ?? '');
+  const prevReportIdRef = useRef(reportId);
 
   const [emailTo, setEmailTo] = useState('');
   const [emailSubj, setEmailSubj] = useState('');
@@ -67,18 +73,121 @@ export function VerifierCaseWorkspace(props: {
   const [closeReason, setCloseReason] = useState('');
 
   useEffect(() => {
+    // Only reset assignment inputs when switching to a different report.
+    // This prevents unsaved typing from being wiped by refreshes.
+    if (prevReportIdRef.current === reportId) return;
+    prevReportIdRef.current = reportId;
     setAssignV(caseState?.assignedVerifier ?? '');
     setAssignS(caseState?.assignedSupervisor ?? '');
     setDeadline(caseState?.deadline ?? '');
     setRedact(caseState?.redactionNotes ?? '');
-  }, [caseState]);
+  }, [reportId, caseState]);
 
   const [accActionId, setAccActionId] = useState('');
   const [accResponse, setAccResponse] = useState('');
   const [accResolution, setAccResolution] = useState('');
   const [accNoAction, setAccNoAction] = useState('');
 
+  useEffect(() => {
+    // Restore per-report drafts so typing survives any refresh/remount.
+    try {
+      const raw = localStorage.getItem(`${DRAFT_KEY_PREFIX}${reportId}`);
+      if (!raw) return;
+      const d = JSON.parse(raw) as Partial<{
+        assignV: string;
+        assignS: string;
+        deadline: string;
+        redact: string;
+        emailTo: string;
+        emailSubj: string;
+        emailBody: string;
+        phoneSummary: string;
+        phoneNum: string;
+        notifyEmail: string;
+        closeReason: string;
+        accActionId: string;
+        accResponse: string;
+        accResolution: string;
+        accNoAction: string;
+      }>;
+      if (typeof d.assignV === 'string') setAssignV(d.assignV);
+      if (typeof d.assignS === 'string') setAssignS(d.assignS);
+      if (typeof d.deadline === 'string') setDeadline(d.deadline);
+      if (typeof d.redact === 'string') setRedact(d.redact);
+      if (typeof d.emailTo === 'string') setEmailTo(d.emailTo);
+      if (typeof d.emailSubj === 'string') setEmailSubj(d.emailSubj);
+      if (typeof d.emailBody === 'string') setEmailBody(d.emailBody);
+      if (typeof d.phoneSummary === 'string') setPhoneSummary(d.phoneSummary);
+      if (typeof d.phoneNum === 'string') setPhoneNum(d.phoneNum);
+      if (typeof d.notifyEmail === 'string') setNotifyEmail(d.notifyEmail);
+      if (typeof d.closeReason === 'string') setCloseReason(d.closeReason);
+      if (typeof d.accActionId === 'string') setAccActionId(d.accActionId);
+      if (typeof d.accResponse === 'string') setAccResponse(d.accResponse);
+      if (typeof d.accResolution === 'string') setAccResolution(d.accResolution);
+      if (typeof d.accNoAction === 'string') setAccNoAction(d.accNoAction);
+    } catch {
+      // ignore storage parse errors
+    }
+  }, [reportId]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        `${DRAFT_KEY_PREFIX}${reportId}`,
+        JSON.stringify({
+          assignV,
+          assignS,
+          deadline,
+          redact,
+          emailTo,
+          emailSubj,
+          emailBody,
+          phoneSummary,
+          phoneNum,
+          notifyEmail,
+          closeReason,
+          accActionId,
+          accResponse,
+          accResolution,
+          accNoAction,
+        }),
+      );
+    } catch {
+      // ignore storage write errors
+    }
+  }, [
+    reportId,
+    assignV,
+    assignS,
+    deadline,
+    redact,
+    emailTo,
+    emailSubj,
+    emailBody,
+    phoneSummary,
+    phoneNum,
+    notifyEmail,
+    closeReason,
+    accActionId,
+    accResponse,
+    accResolution,
+    accNoAction,
+  ]);
+
   const actions = useMemo(() => (Array.isArray(priorActions) ? priorActions : []) as PriorAction[], [priorActions]);
+  const sortedActions = useMemo(
+    () =>
+      [...actions].sort((a, b) => {
+        const ta = new Date(a.at || a.recorded_at || 0).getTime();
+        const tb = new Date(b.at || b.recorded_at || 0).getTime();
+        return tb - ta;
+      }),
+    [actions],
+  );
+  const selectedAction = useMemo(
+    () => sortedActions.find((a) => a.id === accActionId.trim()) || null,
+    [sortedActions, accActionId],
+  );
 
   const run = useCallback(
     async (fn: () => Promise<void>) => {
@@ -429,7 +538,7 @@ export function VerifierCaseWorkspace(props: {
       <div style={{ marginTop: '1.1rem' }}>
         <div className="section-title" style={{ fontSize: '0.78rem' }}>Accountability — record responses</div>
         <p className="text-muted" style={{ fontSize: '0.68rem' }}>
-          Pick an action id from the table, then record agency response, resolution, or why nothing happened.
+          Pick an action from the table or dropdown, then record agency response, resolution, or why nothing happened.
         </p>
         <div style={{ overflowX: 'auto' }}>
           <table className="table-lite" style={{ fontSize: '0.68rem', minWidth: '520px' }}>
@@ -439,22 +548,40 @@ export function VerifierCaseWorkspace(props: {
                 <th>Type</th>
                 <th>When</th>
                 <th>Summary</th>
+                <th>Accountability</th>
               </tr>
             </thead>
             <tbody>
-              {actions.length === 0 ? (
+              {sortedActions.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="text-muted">
+                  <td colSpan={5} className="text-muted">
                     No actions yet.
                   </td>
                 </tr>
               ) : (
-                actions.map((a) => (
+                sortedActions.map((a) => (
                   <tr key={a.id}>
-                    <td className="mono">{a.id?.slice(0, 12)}…</td>
+                    <td>
+                      <button
+                        type="button"
+                        className="btn"
+                        style={{ fontSize: '0.64rem', padding: '0.2rem 0.35rem' }}
+                        onClick={() => setAccActionId(a.id || '')}
+                        title={a.id || ''}
+                      >
+                        {a.id?.slice(0, 12)}…
+                      </button>
+                    </td>
                     <td>{a.actionType || a.label}</td>
-                    <td>{a.at ? new Date(a.at).toLocaleString() : '—'}</td>
+                    <td>{a.at || a.recorded_at ? new Date(a.at || a.recorded_at || '').toLocaleString() : '—'}</td>
                     <td>{(a.summary || '').slice(0, 80)}</td>
+                    <td>
+                      {a.response_summary || a.resolution || a.no_action_reason ? (
+                        <span className="tag tag-sector">Recorded</span>
+                      ) : (
+                        <span className="tag">Pending</span>
+                      )}
+                    </td>
                   </tr>
                 ))
               )}
@@ -462,6 +589,18 @@ export function VerifierCaseWorkspace(props: {
           </table>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginTop: '0.5rem' }}>
+          <select
+            value={accActionId}
+            onChange={(e) => setAccActionId(e.target.value)}
+            style={inputStyle}
+          >
+            <option value="">Select action from report…</option>
+            {sortedActions.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.id} · {a.actionType || a.label || 'action'}
+              </option>
+            ))}
+          </select>
           <input
             placeholder="Action id (full id from audit)"
             value={accActionId}
@@ -469,6 +608,20 @@ export function VerifierCaseWorkspace(props: {
             style={inputStyle}
           />
         </div>
+        {selectedAction ? (
+          <div
+            style={{
+              marginTop: '0.45rem',
+              padding: '0.45rem 0.55rem',
+              border: '1px solid var(--graphite-border)',
+              borderRadius: '6px',
+              fontSize: '0.68rem',
+            }}
+          >
+            Tracking action <span className="mono">{selectedAction.id}</span> · {selectedAction.actionType || selectedAction.label}
+            {selectedAction.response_recorded_at ? ` · last accountability ${new Date(selectedAction.response_recorded_at).toLocaleString()}` : ''}
+          </div>
+        ) : null}
         <textarea placeholder="Response received (agency)" value={accResponse} onChange={(e) => setAccResponse(e.target.value)} rows={2} style={{ ...inputStyle, marginTop: '0.35rem' }} />
         <textarea placeholder="Resolution" value={accResolution} onChange={(e) => setAccResolution(e.target.value)} rows={2} style={{ ...inputStyle, marginTop: '0.35rem' }} />
         <textarea placeholder="Why no action (if applicable)" value={accNoAction} onChange={(e) => setAccNoAction(e.target.value)} rows={2} style={{ ...inputStyle, marginTop: '0.35rem' }} />
@@ -484,7 +637,7 @@ export function VerifierCaseWorkspace(props: {
                 resolution: accResolution,
                 no_action_reason: accNoAction,
               });
-              setNotice('Accountability updated.');
+              setNotice(`Accountability saved for action ${accActionId.trim().slice(0, 12)}…`);
             })
           }
         >

@@ -3,6 +3,7 @@ import {
   fetchVerifierQueue,
   fetchVerifierReportDetail,
   getVerifierIdentity,
+  postAiTriage,
   postOutboundAction,
   postRequestEvidence,
   postVerifierNotes,
@@ -14,6 +15,7 @@ import { categoryPlaybooks } from '../verifier/categoryPlaybooks';
 import type {
   CategoryKey,
   Severity,
+  VerifierAiTriage,
   VerifierCaseState,
   VerifierDetailMeta,
   VerifierQueueRow,
@@ -147,13 +149,14 @@ export function VerifierPortal() {
 
   const [tab, setTab] = useState<Tab>('verify');
   const [query, setQuery] = useState('');
-  const [manualReportId, setManualReportId] = useState('');
   const [category, setCategory] = useState<string>('all');
   const openedReportIdFromUrl = useRef(false);
 
   const [notes, setNotes] = useState('');
   const [actionType, setActionType] = useState('call');
   const [actionMessage, setActionMessage] = useState('');
+  const [aiTriage, setAiTriage] = useState<VerifierAiTriage | null>(null);
+  const [aiBusy, setAiBusy] = useState(false);
   /** Required for real email delivery (API has no recipient otherwise). */
   const [outboundEmail, setOutboundEmail] = useState('');
   const [busy, setBusy] = useState(false);
@@ -223,7 +226,6 @@ export function VerifierPortal() {
     const id = new URLSearchParams(window.location.search).get('reportId')?.trim();
     if (!id) return;
     openedReportIdFromUrl.current = true;
-    setManualReportId(id);
     void openByReportId(id);
   }, [openByReportId]);
 
@@ -235,8 +237,9 @@ export function VerifierPortal() {
   }, [loadQueue, useDemo]);
 
   const loadDetail = useCallback(
-    async (id: string) => {
-      setDetailLoading(true);
+    async (id: string, opts?: { silent?: boolean }) => {
+      const silent = Boolean(opts?.silent);
+      if (!silent) setDetailLoading(true);
       setNotice(null);
       try {
         if (useDemo && id.startsWith('demo-')) {
@@ -254,12 +257,13 @@ export function VerifierPortal() {
             meta: d.meta,
           });
           setNotes(d.notes?.text || '');
+          setAiTriage(null);
         }
       } catch (e: unknown) {
         setNotice(e instanceof Error ? e.message : String(e));
         setDetail(null);
       } finally {
-        setDetailLoading(false);
+        if (!silent) setDetailLoading(false);
       }
     },
     [useDemo, reports],
@@ -276,13 +280,29 @@ export function VerifierPortal() {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return reports.filter((r) => {
-      const hit =
-        !q ||
-        [r.id, r.title, r.city, r.summary, r.category].join(' ').toLowerCase().includes(q);
-      const cat = category === 'all' || r.categoryKey === category;
-      return hit && cat;
-    });
+    const withScore = reports
+      .map((r) => {
+        const hay = [r.id, r.title, r.city, r.summary, r.category].join(' ').toLowerCase();
+        const cat = category === 'all' || r.categoryKey === category;
+        if (!cat) return null;
+        if (!q) return { row: r, score: 1 };
+
+        if (!hay.includes(q)) return null;
+
+        let score = 1;
+        if (r.title.toLowerCase().includes(q)) score += 8;
+        if (r.category.toLowerCase().includes(q) || String(r.categoryKey).toLowerCase().includes(q)) score += 6;
+        if (r.city.toLowerCase().includes(q)) score += 4;
+        if (r.id.toLowerCase().includes(q)) score += 3;
+        if (r.summary.toLowerCase().includes(q)) score += 2;
+        if (r.severity === 'urgent') score += 2;
+        score += Math.round((r.verificationScore || 0) / 20);
+        return { row: r, score };
+      })
+      .filter((x): x is { row: VerifierQueueRow; score: number } => Boolean(x))
+      .sort((a, b) => b.score - a.score);
+
+    return withScore.slice(0, 20).map((x) => x.row);
   }, [reports, query, category]);
 
   const selected = useMemo(
@@ -444,6 +464,25 @@ export function VerifierPortal() {
       setNotice(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
+    }
+  };
+
+  const runAiCopilot = async () => {
+    if (!selectedId || useDemo) {
+      setNotice('AI copilot needs a real server report (not demo mode).');
+      return;
+    }
+    setAiBusy(true);
+    try {
+      const res = await postAiTriage(selectedId);
+      setAiTriage(res.triage);
+      setNotice(
+        `AI quest ready (${res.triage.mode || 'heuristic'}): urgency ${res.triage.urgency}, destination ${res.triage.destination}.`,
+      );
+    } catch (e: unknown) {
+      setNotice(e instanceof Error ? e.message : String(e));
+    } finally {
+      setAiBusy(false);
     }
   };
 
@@ -674,48 +713,18 @@ export function VerifierPortal() {
                       background: 'var(--bg-deep)',
                       border: '1px solid var(--graphite-border)',
                       borderRadius: '6px',
-                      color: 'var(--white)',
+                      color: '#f8fafc',
                     }}
                   >
-                    <option value="all">All categories</option>
-                    <option value="environmental">Environmental</option>
-                    <option value="housing">Housing</option>
-                    <option value="labor">Labor</option>
-                    <option value="public_safety">Public safety</option>
-                    <option value="medical">Medical</option>
+                    <option value="all" style={{ color: '#111827', background: '#ffffff' }}>All categories</option>
+                    <option value="environmental" style={{ color: '#111827', background: '#ffffff' }}>Environmental</option>
+                    <option value="housing" style={{ color: '#111827', background: '#ffffff' }}>Housing</option>
+                    <option value="labor" style={{ color: '#111827', background: '#ffffff' }}>Labor</option>
+                    <option value="public_safety" style={{ color: '#111827', background: '#ffffff' }}>Public safety</option>
+                    <option value="medical" style={{ color: '#111827', background: '#ffffff' }}>Medical</option>
                   </select>
-                  <div style={{ fontSize: '0.65rem', color: 'var(--silver-dim)', marginTop: '0.25rem' }}>
-                    Not in the list? Open by server report id (from API / certificate link):
-                  </div>
-                  <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', alignItems: 'center' }}>
-                    <input
-                      placeholder="e.g. 1775350956460 or Mongo _id"
-                      value={manualReportId}
-                      onChange={(e) => setManualReportId(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') void openByReportId(manualReportId);
-                      }}
-                      style={{
-                        flex: '1 1 140px',
-                        minWidth: '120px',
-                        padding: '0.45rem 0.6rem',
-                        background: 'var(--bg-deep)',
-                        border: '1px solid var(--graphite-border)',
-                        borderRadius: '6px',
-                        color: 'var(--white)',
-                        fontSize: '0.75rem',
-                      }}
-                      aria-label="Report id to load from API"
-                    />
-                    <button
-                      type="button"
-                      className="btn btn-primary"
-                      style={{ fontSize: '0.72rem' }}
-                      disabled={detailLoading || !manualReportId.trim()}
-                      onClick={() => void openByReportId(manualReportId)}
-                    >
-                      Load by ID
-                    </button>
+                  <div className="text-muted" style={{ fontSize: '0.65rem', marginTop: '0.25rem' }}>
+                    Showing up to 20 most relevant results per search/category.
                   </div>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '62vh', overflow: 'auto' }}>
@@ -795,7 +804,7 @@ export function VerifierPortal() {
                 <div className="panel-body">
                   <p className="text-muted">Select a report from the queue.</p>
                 </div>
-              ) : detailLoading ? (
+              ) : detailLoading && !detail?.report ? (
                 <div className="panel-body">
                   <p className="text-muted">Loading report…</p>
                 </div>
@@ -911,7 +920,7 @@ export function VerifierPortal() {
                         priorActions={(detail.report.priorActions || []) as unknown[]}
                         useDemo={useDemo}
                         onRefresh={async () => {
-                          if (selectedId) await loadDetail(selectedId);
+                          if (selectedId) await loadDetail(selectedId, { silent: true });
                         }}
                         setNotice={setNotice}
                       />
@@ -993,6 +1002,48 @@ export function VerifierPortal() {
                     {tab === 'actions' && (
                       <div style={{ marginTop: '1rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                         <div>
+                          <div
+                            style={{
+                              border: '1px solid var(--graphite-border)',
+                              borderRadius: 'var(--radius-lg)',
+                              padding: '0.75rem',
+                              marginBottom: '0.75rem',
+                              background: 'rgba(59, 130, 246, 0.08)',
+                            }}
+                          >
+                            <div className="section-title">AI Verifier Copilot</div>
+                            <p className="text-muted" style={{ fontSize: '0.72rem', marginTop: '0.35rem', marginBottom: '0.5rem' }}>
+                              Generate category-aware quest steps and pre-drafted agency statements for accountability outreach.
+                            </p>
+                            <button type="button" className="btn btn-primary" disabled={busy || aiBusy} onClick={() => void runAiCopilot()}>
+                              {aiBusy ? 'Generating…' : 'Generate AI quest'}
+                            </button>
+                            {aiTriage && (
+                              <div style={{ marginTop: '0.6rem', fontSize: '0.74rem', display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                                <div>
+                                  <strong>Urgency:</strong> {aiTriage.urgency} · <strong>Credibility:</strong>{' '}
+                                  {Math.round(Number(aiTriage.credibility_estimate) || 0)}%
+                                </div>
+                                <div>
+                                  <strong>Route:</strong> {aiTriage.destination}
+                                </div>
+                                {aiTriage.missing_info?.length ? (
+                                  <div>
+                                    <strong>Missing:</strong> {aiTriage.missing_info.join(', ')}
+                                  </div>
+                                ) : null}
+                                {aiTriage.quest_steps?.length ? (
+                                  <ol style={{ margin: '0.35rem 0 0.1rem 1rem', padding: 0 }}>
+                                    {aiTriage.quest_steps.slice(0, 6).map((step, idx) => (
+                                      <li key={`${step}-${idx}`} style={{ marginBottom: '0.18rem' }}>
+                                        {step}
+                                      </li>
+                                    ))}
+                                  </ol>
+                                ) : null}
+                              </div>
+                            )}
+                          </div>
                           <div className="section-title">Action type</div>
                           <select
                             value={actionType}
@@ -1015,12 +1066,12 @@ export function VerifierPortal() {
                             <option value="assign_followup">Assign follow-up</option>
                           </select>
                           <label style={{ display: 'block', marginTop: '0.65rem', fontSize: '0.75rem', color: 'var(--silver-dim)' }}>
-                            Recipient email (required to actually send email — escalation / legal / city)
+                            Recipient email(s) (required to actually send email — escalation / legal / city)
                             <input
                               type="email"
                               value={outboundEmail}
                               onChange={(e) => setOutboundEmail(e.target.value)}
-                              placeholder="agency@city.gov"
+                              placeholder="agency@city.gov, inspector@county.gov"
                               autoComplete="email"
                               style={{
                                 width: '100%',
@@ -1043,6 +1094,38 @@ export function VerifierPortal() {
                               </span>
                             ))}
                           </div>
+                          {aiTriage?.agency_drafts?.length ? (
+                            <div style={{ marginTop: '0.75rem' }}>
+                              <div className="section-title">AI pre-drafted agency statements</div>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem', marginTop: '0.45rem' }}>
+                                {aiTriage.agency_drafts.slice(0, 5).map((d, idx) => (
+                                  <div
+                                    key={`${d.agency}-${idx}`}
+                                    style={{
+                                      border: '1px solid var(--graphite-border)',
+                                      borderRadius: '6px',
+                                      padding: '0.45rem 0.55rem',
+                                      background: 'var(--bg-elevated)',
+                                    }}
+                                  >
+                                    <div style={{ fontSize: '0.74rem', fontWeight: 600 }}>{d.agency}</div>
+                                    {d.subject ? <div className="text-muted" style={{ fontSize: '0.68rem' }}>Subject: {d.subject}</div> : null}
+                                    <button
+                                      type="button"
+                                      className="btn"
+                                      style={{ fontSize: '0.68rem', marginTop: '0.35rem' }}
+                                      onClick={() => {
+                                        setActionType('email_city');
+                                        setActionMessage(d.body || '');
+                                      }}
+                                    >
+                                      Use this draft
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ) : null}
                         </div>
                         <div>
                           <div className="section-title">Message / summary</div>
@@ -1065,6 +1148,16 @@ export function VerifierPortal() {
                           <button type="button" className="btn btn-primary" style={{ marginTop: '0.5rem' }} disabled={busy} onClick={() => void sendOutbound()}>
                             Log outbound action
                           </button>
+                          {aiTriage?.draft_email ? (
+                            <button
+                              type="button"
+                              className="btn"
+                              style={{ marginTop: '0.5rem', marginLeft: '0.5rem' }}
+                              onClick={() => setActionMessage(aiTriage.draft_email)}
+                            >
+                              Use AI quick draft
+                            </button>
+                          ) : null}
                           <p className="text-muted" style={{ fontSize: '0.68rem', marginTop: '0.5rem' }}>
                             Creates an audit entry. Wire Twilio/SendGrid/webhooks on the server for real calls and email.
                           </p>
