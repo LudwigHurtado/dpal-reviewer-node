@@ -96,6 +96,8 @@ For static hosting only (e.g. Vercel), deploy the Express API separately and set
 
 If Railway’s build log says **Deploying as vite static site** and serves **Caddy**, the Express API is **not** running. This repo includes a **`Dockerfile`** so Railway builds a **Node** image and runs **`node server/index.mjs`**. Ensure the service uses the **Dockerfile** builder (or set **Start Command** to `npm start` / `node server/index.mjs` and avoid static-only Railpack). Set **`PORT`** (Railway injects it) and **`DPAL_UPSTREAM_URL`** on that service.
 
+**Production Reviewer API (this project on Railway):** `https://dpal-reviewer-node-production.up.railway.app` — health check: [`/api/reviewer/v1/health`](https://dpal-reviewer-node-production.up.railway.app/api/reviewer/v1/health). Set **`VITE_API_BASE_URL`** on the static UI to `https://dpal-reviewer-node-production.up.railway.app/api` (no trailing slash after `/api`).
+
 ### “404” on `/api/reviewer/v1/verifier/reports`
 
 That path exists **only** on the **Reviewer Node** server (`server/index.mjs`). If `VITE_API_BASE_URL` points at your **main** DPAL API (e.g. `web-production-…up.railway.app`), the browser will get **404** — the filing API does not mount the verifier routes. You need **two** services: (1) main API for `POST/GET /api/reports*`, (2) Reviewer API for `/api/reviewer/v1/verifier/*`, with `DPAL_UPSTREAM_URL` on (2) set to (1)’s origin.

@@ -12,6 +12,7 @@ This file is **handwritten project memory** for assistants: architecture, conven
 - **Upstream:** **`DPAL_UPSTREAM_URL`** + **`DPAL_UPSTREAM_REPORTS_PATH=/api/reports/feed`**; detail via **`GET /api/reports/:id`** on the same host.
 - **Verifier REST:** **`/api/reviewer/v1/verifier`** — `GET /reports`, `GET /reports/:id`, `GET /reports/:id/timeline`, `POST` notes / verify / request-evidence / actions. Local audit file **`server/data/verifier-audit.json`** until DB tables exist.
 - **Legacy:** **`GET /api/reviewer/v1/dashboard`** and **SSE `/stream`** remain for older clients.
+- **Production (Railway, this repo’s API service):** origin **`https://dpal-reviewer-node-production.up.railway.app`** — **`GET /api/reviewer/v1/health`**. Static UI **`VITE_API_BASE_URL`** should be **`https://dpal-reviewer-node-production.up.railway.app/api`**.
 
 ---
 
