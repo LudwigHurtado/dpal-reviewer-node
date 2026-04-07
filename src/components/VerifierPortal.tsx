@@ -616,7 +616,7 @@ export function VerifierPortal() {
           }}
         >
           <img
-            src="/create-mission-main.png"
+            src={`${import.meta.env.BASE_URL}create-mission-main.png`}
             alt="DPAL Create a Mission — community support and coordination"
             width={1600}
             height={600}
