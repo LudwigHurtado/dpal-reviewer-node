@@ -42,6 +42,46 @@ function statusLabel(s: string): string {
   return s.replaceAll('_', ' ');
 }
 
+function toGovSlug(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/county/gi, '')
+    .replace(/[^a-z0-9]+/g, '')
+    .trim();
+}
+
+function extractCountyName(input?: string | null): string | null {
+  const raw = String(input || '').trim();
+  if (!raw) return null;
+  const m = raw.match(/([a-z][a-z .'-]{1,60})\s+county/i);
+  return m?.[1]?.trim() || null;
+}
+
+function buildSuggestedEmails(args: { categoryKey?: string; city?: string; location?: string }): string[] {
+  const county = extractCountyName(args.location) || extractCountyName(args.city);
+  const countySlug = county ? toGovSlug(county) : '';
+  const citySlug = toGovSlug(args.city || '');
+  const domains = [
+    countySlug ? `${countySlug}county.gov` : '',
+    citySlug ? `${citySlug}.gov` : '',
+    countySlug ? `${countySlug}countyca.gov` : '',
+  ].filter(Boolean);
+  const domain = domains[0] || 'county.gov';
+
+  const common = ['311', 'clerk', 'publicworks'];
+  const byCategory: Record<string, string[]> = {
+    environmental: ['environmentalhealth', 'airquality', 'stormwater', 'solidwaste'],
+    housing: ['housing', 'codeenforcement', 'buildinginspections', 'landlordtenant'],
+    labor: ['laborstandards', 'workforce', 'humanrights'],
+    public_safety: ['sheriff', 'police', 'dispatch', 'emergencymanagement'],
+    medical: ['publichealth', 'epidemiology', 'adultprotectiveservices'],
+  };
+
+  const localParts = [...(byCategory[String(args.categoryKey || '')] || []), ...common];
+  const unique = Array.from(new Set(localParts));
+  return unique.slice(0, 6).map((local) => `${local}@${domain}`);
+}
+
 /** Shrink full detail back to a queue row for the left-hand list. */
 function detailToQueueRow(r: VerifierReportDetail): VerifierQueueRow {
   const evCount = Array.isArray(r.evidence) ? r.evidence.length : r.evidenceCount;
@@ -312,6 +352,15 @@ export function VerifierPortal() {
   );
 
   const playbook = selected ? categoryPlaybooks[selected.categoryKey as CategoryKey] : null;
+  const suggestedEmails = useMemo(
+    () =>
+      buildSuggestedEmails({
+        categoryKey: (detail?.report.categoryKey || selected?.categoryKey) as string | undefined,
+        city: detail?.report.city || selected?.city,
+        location: detail?.report.location,
+      }),
+    [detail?.report.categoryKey, detail?.report.city, detail?.report.location, selected?.categoryKey, selected?.city],
+  );
 
   const metrics = useMemo(() => {
     const urgent = reports.filter((r) => r.severity === 'urgent').length;
@@ -1099,6 +1148,36 @@ export function VerifierPortal() {
                               }}
                             />
                           </label>
+                          {suggestedEmails.length > 0 ? (
+                            <div style={{ marginTop: '0.55rem' }}>
+                              <div className="section-title">Suggested recipient emails</div>
+                              <div className="text-muted" style={{ fontSize: '0.68rem', marginTop: '0.2rem' }}>
+                                Suggested from report category + location. Verify before sending.
+                              </div>
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', marginTop: '0.4rem' }}>
+                                {suggestedEmails.map((email) => (
+                                  <button
+                                    key={email}
+                                    type="button"
+                                    className="btn"
+                                    style={{ fontSize: '0.67rem' }}
+                                    onClick={() =>
+                                      setOutboundEmail((prev) => {
+                                        const parts = prev
+                                          .split(',')
+                                          .map((p) => p.trim())
+                                          .filter(Boolean);
+                                        if (parts.includes(email)) return prev;
+                                        return [...parts, email].join(', ');
+                                      })
+                                    }
+                                  >
+                                    + {email}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          ) : null}
                           <label style={{ display: 'block', marginTop: '0.65rem', fontSize: '0.75rem', color: 'var(--silver-dim)' }}>
                             Destination phone (required for AI call)
                             <input

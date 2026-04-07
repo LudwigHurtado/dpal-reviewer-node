@@ -276,6 +276,9 @@ a:hover {
   gap: 1rem;
 }
 
+.span-3 {
+  grid-column: span 3;
+}
 .span-4 {
   grid-column: span 4;
 }
@@ -296,6 +299,7 @@ a:hover {
 }
 
 @media (max-width: 1400px) {
+  .span-3,
   .span-4,
   .span-5,
   .span-6,
