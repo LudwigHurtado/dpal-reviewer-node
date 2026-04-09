@@ -1,0 +1,737 @@
+{
+  "notes": {},
+  "timelines": {
+    "rep-1775346235370": [
+      {
+        "id": "evt-1775470003051-37vuzi1",
+        "at": "2026-04-06T10:06:43.051Z",
+        "type": "case_state",
+        "label": "Case workspace updated",
+        "detail": "assignedVerifier, assignedSupervisor, redactionNotes, lastReviewedBy, lastReviewedAt",
+        "performedBy": "verifier"
+      },
+      {
+        "id": "evt-1775470007449-xrk85sr",
+        "at": "2026-04-06T10:06:47.449Z",
+        "type": "case_state",
+        "label": "Disposition: action_taken",
+        "detail": "{\"disposition\":\"action_taken\",\"reporterFacingStatus\":\"action_taken\",\"lastReviewedBy\":\"verifier\",\"lastReviewedAt\":\"2026-04-06T10:06:47.449Z\"}",
+        "performedBy": "verifier"
+      },
+      {
+        "id": "evt-1775470007451-xq72pwq",
+        "at": "2026-04-06T10:06:47.451Z",
+        "type": "disposition",
+        "label": "Marked: action_taken",
+        "detail": "",
+        "performedBy": "verifier"
+      },
+      {
+        "id": "evt-1775470165544-pc2489p",
+        "at": "2026-04-06T10:09:25.544Z",
+        "type": "case_state",
+        "label": "Disposition: under_review",
+        "detail": "{\"disposition\":\"under_review\",\"reporterFacingStatus\":\"under_review\",\"lastReviewedBy\":\"verifier\",\"lastReviewedAt\":\"2026-04-06T10:09:25.543Z\"}",
+        "performedBy": "verifier"
+      },
+      {
+        "id": "evt-1775470165546-lu3mkkc",
+        "at": "2026-04-06T10:09:25.546Z",
+        "type": "disposition",
+        "label": "Marked: under_review",
+        "detail": "",
+        "performedBy": "verifier"
+      },
+      {
+        "id": "evt-1775470166571-fceycti",
+        "at": "2026-04-06T10:09:26.571Z",
+        "type": "case_state",
+        "label": "Disposition: verified",
+        "detail": "{\"disposition\":\"verified\",\"reporterFacingStatus\":\"verified\",\"lastReviewedBy\":\"verifier\",\"lastReviewedAt\":\"2026-04-06T10:09:26.571Z\"}",
+        "performedBy": "verifier"
+      },
+      {
+        "id": "evt-1775470166573-ko56g1k",
+        "at": "2026-04-06T10:09:26.573Z",
+        "type": "disposition",
+        "label": "Marked: verified",
+        "detail": "",
+        "performedBy": "verifier"
+      },
+      {
+        "id": "evt-1775470296264-6q1tkiu",
+        "at": "2026-04-06T10:11:36.264Z",
+        "type": "email",
+        "label": "Email to agency",
+        "detail": "Dispatcher/Officer,\n\nI am calling from DPAL regarding a public safety report.\n\nReport ID: rep-1775346235370\nLocation: Santa Cruz Bolivia\nConcern summary: I was offered drugs and was told to sell it for him.\n\nFollow-up: Arrest him and take him to jail. \n\nRequest: please log this concern, share incident/reference number, and confirm next steps.",
+        "performedBy": "verifier"
+      },
+      {
+        "id": "evt-1775470296749-77u7p5e",
+        "at": "2026-04-06T10:11:36.749Z",
+        "type": "accountability_update",
+        "label": "Accountability record updated",
+        "detail": "{\"status\":\"send_failed\",\"send_error\":\"all_providers_failed\"}",
+        "performedBy": "verifier"
+      },
+      {
+        "id": "evt-1775470304418-np8kssp",
+        "at": "2026-04-06T10:11:44.418Z",
+        "type": "legal_referral",
+        "label": "Legal referral",
+        "detail": "",
+        "performedBy": "verifier"
+      },
+      {
+        "id": "evt-1775471566104-j0i1ao6",
+        "at": "2026-04-06T10:32:46.104Z",
+        "type": "email",
+        "label": "Email to agency",
+        "detail": "Dispatcher/Officer,\n\nI am calling from DPAL regarding a public safety report.\n\nReport ID: rep-1775346235370\nLocation: Santa Cruz Bolivia\nConcern summary: I was offered drugs and was told to sell it for him.\n\nFollow-up: Arrest him and take him to jail. \n\nRequest: please log this concern, share incident/reference number, and confirm next steps.",
+        "performedBy": "verifier"
+      },
+      {
+        "id": "evt-1775471566520-4yxst44",
+        "at": "2026-04-06T10:32:46.520Z",
+        "type": "accountability_update",
+        "label": "Accountability record updated",
+        "detail": "{\"status\":\"send_failed\",\"send_error\":\"all_providers_failed\"}",
+        "performedBy": "verifier"
+      },
+      {
+        "id": "evt-1775471574571-y6iio63",
+        "at": "2026-04-06T10:32:54.571Z",
+        "type": "internal_followup",
+        "label": "Internal follow-up (task)",
+        "detail": "",
+        "performedBy": "verifier"
+      },
+      {
+        "id": "evt-1775471610734-zs8oox0",
+        "at": "2026-04-06T10:33:30.734Z",
+        "type": "accountability_update",
+        "label": "Accountability record updated",
+        "detail": "{\"response_recorded_at\":\"2026-04-06T10:33:30.733Z\",\"response_summary\":\"\",\"resolution\":\"\",\"no_action_reason\":\"\",\"performed_by\":\"verifier\"}",
+        "performedBy": "verifier"
+      },
+      {
+        "id": "evt-1775471616060-w2rgxal",
+        "at": "2026-04-06T10:33:36.060Z",
+        "type": "closure",
+        "label": "Closed — no action / resolved",
+        "detail": "Closed from verifier workspace.",
+        "performedBy": "verifier"
+      },
+      {
+        "id": "evt-1775471616062-i0b7zck",
+        "at": "2026-04-06T10:33:36.062Z",
+        "type": "case_state",
+        "label": "Case closed",
+        "detail": "Closed from verifier workspace.",
+        "performedBy": "verifier"
+      },
+      {
+        "id": "evt-1775471674884-5sknz09",
+        "at": "2026-04-06T10:34:34.884Z",
+        "type": "email",
+        "label": "Email to agency",
+        "detail": "911 / Emergency",
+        "performedBy": "verifier"
+      },
+      {
+        "id": "evt-1775471675288-a6jbpqt",
+        "at": "2026-04-06T10:34:35.288Z",
+        "type": "accountability_update",
+        "label": "Accountability record updated",
+        "detail": "{\"status\":\"send_failed\",\"send_error\":\"all_providers_failed\"}",
+        "performedBy": "verifier"
+      },
+      {
+        "id": "evt-1775477463601-1crpm5d",
+        "at": "2026-04-06T12:11:03.601Z",
+        "type": "voice_call_outbound",
+        "label": "Outbound AI voice call",
+        "detail": "Outbound DPAL AI support call",
+        "performedBy": "verifier"
+      },
+      {
+        "id": "evt-1775477464273-3he8ao6",
+        "at": "2026-04-06T12:11:04.273Z",
+        "type": "accountability_update",
+        "label": "Accountability record updated",
+        "detail": "{\"status\":\"call_failed\",\"call_error\":\"twilio_call_failed\",\"call_error_detail\":{\"code\":20003,\"message\":\"Authenticate\",\"more_info\":\"https://www.twilio.com/docs/errors/20003\",\"status\":401}}",
+        "performedBy": "verifier"
+      },
+      {
+        "id": "evt-1775477477809-bg26ua9",
+        "at": "2026-04-06T12:11:17.809Z",
+        "type": "voice_call_outbound",
+        "label": "Outbound AI voice call",
+        "detail": "hello",
+        "performedBy": "verifier"
+      },
+      {
+        "id": "evt-1775477478141-tzthgun",
+        "at": "2026-04-06T12:11:18.141Z",
+        "type": "accountability_update",
+        "label": "Accountability record updated",
+        "detail": "{\"status\":\"call_failed\",\"call_error\":\"twilio_call_failed\",\"call_error_detail\":{\"code\":20003,\"message\":\"Authenticate\",\"more_info\":\"https://www.twilio.com/docs/errors/20003\",\"status\":401}}",
+        "performedBy": "verifier"
+      },
+      {
+        "id": "evt-1775477552982-91jbwy9",
+        "at": "2026-04-06T12:12:32.982Z",
+        "type": "voice_call_outbound",
+        "label": "Outbound AI voice call",
+        "detail": "hello",
+        "performedBy": "verifier"
+      },
+      {
+        "id": "evt-1775477553572-puh0xuu",
+        "at": "2026-04-06T12:12:33.572Z",
+        "type": "accountability_update",
+        "label": "Accountability record updated",
+        "detail": "{\"status\":\"call_failed\",\"call_error\":\"twilio_call_failed\",\"call_error_detail\":{\"code\":20003,\"message\":\"Authenticate\",\"more_info\":\"https://www.twilio.com/docs/errors/20003\",\"status\":401}}",
+        "performedBy": "verifier"
+      },
+      {
+        "id": "evt-1775477583789-sx0x4qx",
+        "at": "2026-04-06T12:13:03.789Z",
+        "type": "voice_call_outbound",
+        "label": "Outbound AI voice call",
+        "detail": "hello",
+        "performedBy": "verifier"
+      },
+      {
+        "id": "evt-1775477584165-96kk6d4",
+        "at": "2026-04-06T12:13:04.165Z",
+        "type": "accountability_update",
+        "label": "Accountability record updated",
+        "detail": "{\"status\":\"call_failed\",\"call_error\":\"twilio_call_failed\",\"call_error_detail\":{\"code\":20003,\"message\":\"Authenticate\",\"more_info\":\"https://www.twilio.com/docs/errors/20003\",\"status\":401}}",
+        "performedBy": "verifier"
+      },
+      {
+        "id": "evt-1775477607301-ph1fh23",
+        "at": "2026-04-06T12:13:27.301Z",
+        "type": "voice_call_outbound",
+        "label": "Outbound AI voice call",
+        "detail": "smoke test",
+        "performedBy": "verifier"
+      },
+      {
+        "id": "evt-1775477607633-a6pe86s",
+        "at": "2026-04-06T12:13:27.633Z",
+        "type": "accountability_update",
+        "label": "Accountability record updated",
+        "detail": "{\"status\":\"call_failed\",\"call_error\":\"twilio_call_failed\",\"call_error_detail\":{\"code\":20003,\"message\":\"Authenticate\",\"more_info\":\"https://www.twilio.com/docs/errors/20003\",\"status\":401}}",
+        "performedBy": "verifier"
+      },
+      {
+        "id": "evt-1775477966063-jl8t48d",
+        "at": "2026-04-06T12:19:26.063Z",
+        "type": "voice_call_outbound",
+        "label": "Outbound AI voice call",
+        "detail": "auth smoke test",
+        "performedBy": "verifier"
+      },
+      {
+        "id": "evt-1775477966469-pxi5cfq",
+        "at": "2026-04-06T12:19:26.469Z",
+        "type": "accountability_update",
+        "label": "Accountability record updated",
+        "detail": "{\"status\":\"call_failed\",\"call_error\":\"twilio_call_failed\",\"call_error_detail\":{\"code\":20003,\"message\":\"Authenticate\",\"more_info\":\"https://www.twilio.com/docs/errors/20003\",\"status\":401}}",
+        "performedBy": "verifier"
+      },
+      {
+        "id": "evt-1775478091544-jmsovst",
+        "at": "2026-04-06T12:21:31.544Z",
+        "type": "voice_call_outbound",
+        "label": "Outbound AI voice call",
+        "detail": "Outbound DPAL AI support call",
+        "performedBy": "verifier"
+      },
+      {
+        "id": "evt-1775478092039-eh497wh",
+        "at": "2026-04-06T12:21:32.039Z",
+        "type": "accountability_update",
+        "label": "Accountability record updated",
+        "detail": "{\"status\":\"call_failed\",\"call_error\":\"twilio_call_failed\",\"call_error_detail\":{\"code\":20003,\"message\":\"Authenticate\",\"more_info\":\"https://www.twilio.com/docs/errors/20003\",\"status\":401}}",
+        "performedBy": "verifier"
+      },
+      {
+        "id": "evt-1775478094815-409msga",
+        "at": "2026-04-06T12:21:34.815Z",
+        "type": "voice_call_outbound",
+        "label": "Outbound AI voice call",
+        "detail": "sfsdf",
+        "performedBy": "verifier"
+      },
+      {
+        "id": "evt-1775478095231-rz7t428",
+        "at": "2026-04-06T12:21:35.231Z",
+        "type": "accountability_update",
+        "label": "Accountability record updated",
+        "detail": "{\"status\":\"call_failed\",\"call_error\":\"twilio_call_failed\",\"call_error_detail\":{\"code\":20003,\"message\":\"Authenticate\",\"more_info\":\"https://www.twilio.com/docs/errors/20003\",\"status\":401}}",
+        "performedBy": "verifier"
+      }
+    ],
+    "rep-1774979584935": [
+      {
+        "id": "evt-1775477907867-iyf508p",
+        "at": "2026-04-06T12:18:27.867Z",
+        "type": "voice_call_outbound",
+        "label": "Outbound AI voice call",
+        "detail": "Outbound DPAL AI support call",
+        "performedBy": "verifier"
+      },
+      {
+        "id": "evt-1775477908350-80d4918",
+        "at": "2026-04-06T12:18:28.350Z",
+        "type": "accountability_update",
+        "label": "Accountability record updated",
+        "detail": "{\"status\":\"call_failed\",\"call_error\":\"twilio_call_failed\",\"call_error_detail\":{\"code\":20003,\"message\":\"Authenticate\",\"more_info\":\"https://www.twilio.com/docs/errors/20003\",\"status\":401}}",
+        "performedBy": "verifier"
+      }
+    ],
+    "rep-1774890858691": [
+      {
+        "id": "evt-1775565770360-y0yprn2",
+        "at": "2026-04-07T12:42:50.360Z",
+        "type": "closure",
+        "label": "Closed — no action / resolved",
+        "detail": "Closed from verifier workspace.",
+        "performedBy": "verifier"
+      },
+      {
+        "id": "evt-1775565770363-gwl6fkz",
+        "at": "2026-04-07T12:42:50.363Z",
+        "type": "case_state",
+        "label": "Case closed",
+        "detail": "Closed from verifier workspace.",
+        "performedBy": "verifier"
+      },
+      {
+        "id": "evt-1775565773900-5j7pkc6",
+        "at": "2026-04-07T12:42:53.900Z",
+        "type": "escalate_emergency",
+        "label": "Emergency risk escalation",
+        "detail": "",
+        "performedBy": "verifier"
+      },
+      {
+        "id": "evt-1775565773902-t6owwhj",
+        "at": "2026-04-07T12:42:53.902Z",
+        "type": "case_state",
+        "label": "Emergency escalation",
+        "detail": "{\"disposition\":\"urgent\",\"lastReviewedBy\":\"verifier\",\"lastReviewedAt\":\"2026-04-07T12:42:53.901Z\"}",
+        "performedBy": "verifier"
+      },
+      {
+        "id": "evt-1775565775797-fecfruu",
+        "at": "2026-04-07T12:42:55.797Z",
+        "type": "legal_referral",
+        "label": "Legal referral",
+        "detail": "",
+        "performedBy": "verifier"
+      },
+      {
+        "id": "evt-1775565779222-bx9fak0",
+        "at": "2026-04-07T12:42:59.222Z",
+        "type": "internal_followup",
+        "label": "Internal follow-up (task)",
+        "detail": "",
+        "performedBy": "verifier"
+      },
+      {
+        "id": "evt-1775565786424-nctqn90",
+        "at": "2026-04-07T12:43:06.424Z",
+        "type": "case_state",
+        "label": "Case workspace updated",
+        "detail": "assignedVerifier, assignedSupervisor, redactionNotes, lastReviewedBy, lastReviewedAt",
+        "performedBy": "verifier"
+      },
+      {
+        "id": "evt-1775566064909-ls5piaq",
+        "at": "2026-04-07T12:47:44.909Z",
+        "type": "accountability_update",
+        "label": "Accountability record updated",
+        "detail": "{\"response_recorded_at\":\"2026-04-07T12:47:44.908Z\",\"response_summary\":\"sdfsd\",\"resolution\":\"ffff\",\"no_action_reason\":\"adfasdf\",\"performed_by\":\"verifier\"}",
+        "performedBy": "verifier"
+      },
+      {
+        "id": "evt-1775566065841-peshvsp",
+        "at": "2026-04-07T12:47:45.841Z",
+        "type": "accountability_update",
+        "label": "Accountability record updated",
+        "detail": "{\"response_recorded_at\":\"2026-04-07T12:47:45.840Z\",\"response_summary\":\"sdfsd\",\"resolution\":\"ffff\",\"no_action_reason\":\"adfasdf\",\"performed_by\":\"verifier\"}",
+        "performedBy": "verifier"
+      }
+    ]
+  },
+  "actions": [
+    {
+      "id": "act-1775470007451-eiwp1u8",
+      "reportId": "rep-1775346235370",
+      "at": "2026-04-06T10:06:47.451Z",
+      "actionType": "disposition",
+      "label": "Marked: action_taken",
+      "summary": "",
+      "disposition": "action_taken",
+      "performed_by": "verifier"
+    },
+    {
+      "id": "act-1775470165545-nufx75p",
+      "reportId": "rep-1775346235370",
+      "at": "2026-04-06T10:09:25.545Z",
+      "actionType": "disposition",
+      "label": "Marked: under_review",
+      "summary": "",
+      "disposition": "under_review",
+      "performed_by": "verifier"
+    },
+    {
+      "id": "act-1775470166573-gb3026w",
+      "reportId": "rep-1775346235370",
+      "at": "2026-04-06T10:09:26.573Z",
+      "actionType": "disposition",
+      "label": "Marked: verified",
+      "summary": "",
+      "disposition": "verified",
+      "performed_by": "verifier"
+    },
+    {
+      "id": "act-1775470296264-gr565dq",
+      "reportId": "rep-1775346235370",
+      "at": "2026-04-06T10:11:36.264Z",
+      "actionType": "email",
+      "label": "Email to agency",
+      "destination_email": "ludwingfhurtado@gmail.com",
+      "summary": "Dispatcher/Officer,\n\nI am calling from DPAL regarding a public safety report.\n\nReport ID: rep-1775346235370\nLocation: Santa Cruz Bolivia\nConcern summary: I was offered drugs and was told to sell it for him.\n\nFollow-up: Arrest him and take him to jail. \n\nRequest: please log this concern, share incident/reference number, and confirm next steps.",
+      "performed_by": "verifier",
+      "status": "send_failed",
+      "recorded_at": "2026-04-06T10:11:36.263Z",
+      "sent_to": "ludwingfhurtado@gmail.com",
+      "send_error": "all_providers_failed",
+      "accountability_updated_at": "2026-04-06T10:11:36.749Z"
+    },
+    {
+      "id": "act-1775470304418-ej51dv9",
+      "reportId": "rep-1775346235370",
+      "at": "2026-04-06T10:11:44.418Z",
+      "actionType": "legal_referral",
+      "label": "Legal referral",
+      "summary": "",
+      "performed_by": "verifier",
+      "recorded_at": "2026-04-06T10:11:44.418Z",
+      "response_recorded_at": "2026-04-06T10:33:30.733Z",
+      "response_summary": "",
+      "resolution": "",
+      "no_action_reason": "",
+      "accountability_updated_at": "2026-04-06T10:33:30.734Z"
+    },
+    {
+      "id": "act-1775471566104-loa88ax",
+      "reportId": "rep-1775346235370",
+      "at": "2026-04-06T10:32:46.104Z",
+      "actionType": "email",
+      "label": "Email to agency",
+      "destination_email": "ludwingfhurtado@gmail.com",
+      "summary": "Dispatcher/Officer,\n\nI am calling from DPAL regarding a public safety report.\n\nReport ID: rep-1775346235370\nLocation: Santa Cruz Bolivia\nConcern summary: I was offered drugs and was told to sell it for him.\n\nFollow-up: Arrest him and take him to jail. \n\nRequest: please log this concern, share incident/reference number, and confirm next steps.",
+      "performed_by": "verifier",
+      "status": "send_failed",
+      "recorded_at": "2026-04-06T10:32:46.103Z",
+      "sent_to": "ludwingfhurtado@gmail.com",
+      "send_error": "all_providers_failed",
+      "accountability_updated_at": "2026-04-06T10:32:46.520Z"
+    },
+    {
+      "id": "act-1775471574571-5mh22bm",
+      "reportId": "rep-1775346235370",
+      "at": "2026-04-06T10:32:54.571Z",
+      "actionType": "internal_followup",
+      "label": "Internal follow-up (task)",
+      "summary": "",
+      "performed_by": "verifier",
+      "recorded_at": "2026-04-06T10:32:54.571Z"
+    },
+    {
+      "id": "act-1775471616060-rstz3op",
+      "reportId": "rep-1775346235370",
+      "at": "2026-04-06T10:33:36.060Z",
+      "actionType": "closure",
+      "label": "Closed — no action / resolved",
+      "summary": "Closed from verifier workspace.",
+      "no_action_reason": "Closed from verifier workspace.",
+      "performed_by": "verifier",
+      "recorded_at": "2026-04-06T10:33:36.059Z"
+    },
+    {
+      "id": "act-1775471674884-texvfbk",
+      "reportId": "rep-1775346235370",
+      "at": "2026-04-06T10:34:34.884Z",
+      "actionType": "email",
+      "label": "Email to agency",
+      "destination_name": "911 / Emergency",
+      "destination_email": "ludwigfhurtado@gmai.com",
+      "summary": "",
+      "performed_by": "verifier",
+      "status": "send_failed",
+      "recorded_at": "2026-04-06T10:34:34.884Z",
+      "sent_to": "ludwigfhurtado@gmai.com",
+      "send_error": "all_providers_failed",
+      "accountability_updated_at": "2026-04-06T10:34:35.288Z"
+    },
+    {
+      "id": "act-1775477463600-2k120ln",
+      "reportId": "rep-1775346235370",
+      "at": "2026-04-06T12:11:03.601Z",
+      "actionType": "voice_call_outbound",
+      "label": "Outbound AI voice call",
+      "destination_phone": "2135824646",
+      "summary": "Outbound DPAL AI support call",
+      "performed_by": "verifier",
+      "status": "call_failed",
+      "recorded_at": "2026-04-06T12:11:03.598Z",
+      "call_error": "twilio_call_failed",
+      "call_error_detail": {
+        "code": 20003,
+        "message": "Authenticate",
+        "more_info": "https://www.twilio.com/docs/errors/20003",
+        "status": 401
+      },
+      "accountability_updated_at": "2026-04-06T12:11:04.273Z"
+    },
+    {
+      "id": "act-1775477477809-tabch1f",
+      "reportId": "rep-1775346235370",
+      "at": "2026-04-06T12:11:17.809Z",
+      "actionType": "voice_call_outbound",
+      "label": "Outbound AI voice call",
+      "destination_phone": "2135824646",
+      "summary": "hello",
+      "performed_by": "verifier",
+      "status": "call_failed",
+      "recorded_at": "2026-04-06T12:11:17.809Z",
+      "call_error": "twilio_call_failed",
+      "call_error_detail": {
+        "code": 20003,
+        "message": "Authenticate",
+        "more_info": "https://www.twilio.com/docs/errors/20003",
+        "status": 401
+      },
+      "accountability_updated_at": "2026-04-06T12:11:18.141Z"
+    },
+    {
+      "id": "act-1775477552982-res528g",
+      "reportId": "rep-1775346235370",
+      "at": "2026-04-06T12:12:32.982Z",
+      "actionType": "voice_call_outbound",
+      "label": "Outbound AI voice call",
+      "destination_phone": "2135824646",
+      "summary": "hello",
+      "performed_by": "verifier",
+      "status": "call_failed",
+      "recorded_at": "2026-04-06T12:12:32.982Z",
+      "call_error": "twilio_call_failed",
+      "call_error_detail": {
+        "code": 20003,
+        "message": "Authenticate",
+        "more_info": "https://www.twilio.com/docs/errors/20003",
+        "status": 401
+      },
+      "accountability_updated_at": "2026-04-06T12:12:33.572Z"
+    },
+    {
+      "id": "act-1775477583789-c9xzj02",
+      "reportId": "rep-1775346235370",
+      "at": "2026-04-06T12:13:03.789Z",
+      "actionType": "voice_call_outbound",
+      "label": "Outbound AI voice call",
+      "destination_phone": "12135824646",
+      "summary": "hello",
+      "performed_by": "verifier",
+      "status": "call_failed",
+      "recorded_at": "2026-04-06T12:13:03.788Z",
+      "call_error": "twilio_call_failed",
+      "call_error_detail": {
+        "code": 20003,
+        "message": "Authenticate",
+        "more_info": "https://www.twilio.com/docs/errors/20003",
+        "status": 401
+      },
+      "accountability_updated_at": "2026-04-06T12:13:04.165Z"
+    },
+    {
+      "id": "act-1775477607301-z3d5dzm",
+      "reportId": "rep-1775346235370",
+      "at": "2026-04-06T12:13:27.301Z",
+      "actionType": "voice_call_outbound",
+      "label": "Outbound AI voice call",
+      "destination_phone": "+10000000000",
+      "summary": "smoke test",
+      "performed_by": "verifier",
+      "status": "call_failed",
+      "recorded_at": "2026-04-06T12:13:27.300Z",
+      "call_error": "twilio_call_failed",
+      "call_error_detail": {
+        "code": 20003,
+        "message": "Authenticate",
+        "more_info": "https://www.twilio.com/docs/errors/20003",
+        "status": 401
+      },
+      "accountability_updated_at": "2026-04-06T12:13:27.633Z"
+    },
+    {
+      "id": "act-1775477907866-1y3xypa",
+      "reportId": "rep-1774979584935",
+      "at": "2026-04-06T12:18:27.866Z",
+      "actionType": "voice_call_outbound",
+      "label": "Outbound AI voice call",
+      "destination_phone": "12135824646",
+      "summary": "Outbound DPAL AI support call",
+      "performed_by": "verifier",
+      "status": "call_failed",
+      "recorded_at": "2026-04-06T12:18:27.863Z",
+      "call_error": "twilio_call_failed",
+      "call_error_detail": {
+        "code": 20003,
+        "message": "Authenticate",
+        "more_info": "https://www.twilio.com/docs/errors/20003",
+        "status": 401
+      },
+      "accountability_updated_at": "2026-04-06T12:18:28.350Z"
+    },
+    {
+      "id": "act-1775477966063-5jb8um1",
+      "reportId": "rep-1775346235370",
+      "at": "2026-04-06T12:19:26.063Z",
+      "actionType": "voice_call_outbound",
+      "label": "Outbound AI voice call",
+      "destination_phone": "+10000000000",
+      "summary": "auth smoke test",
+      "performed_by": "verifier",
+      "status": "call_failed",
+      "recorded_at": "2026-04-06T12:19:26.061Z",
+      "call_error": "twilio_call_failed",
+      "call_error_detail": {
+        "code": 20003,
+        "message": "Authenticate",
+        "more_info": "https://www.twilio.com/docs/errors/20003",
+        "status": 401
+      },
+      "accountability_updated_at": "2026-04-06T12:19:26.469Z"
+    },
+    {
+      "id": "act-1775478091544-ig0wrfp",
+      "reportId": "rep-1775346235370",
+      "at": "2026-04-06T12:21:31.544Z",
+      "actionType": "voice_call_outbound",
+      "label": "Outbound AI voice call",
+      "destination_phone": "1234824646",
+      "summary": "Outbound DPAL AI support call",
+      "performed_by": "verifier",
+      "status": "call_failed",
+      "recorded_at": "2026-04-06T12:21:31.541Z",
+      "call_error": "twilio_call_failed",
+      "call_error_detail": {
+        "code": 20003,
+        "message": "Authenticate",
+        "more_info": "https://www.twilio.com/docs/errors/20003",
+        "status": 401
+      },
+      "accountability_updated_at": "2026-04-06T12:21:32.039Z"
+    },
+    {
+      "id": "act-1775478094815-ytqyv0p",
+      "reportId": "rep-1775346235370",
+      "at": "2026-04-06T12:21:34.815Z",
+      "actionType": "voice_call_outbound",
+      "label": "Outbound AI voice call",
+      "destination_phone": "1234824646",
+      "summary": "sfsdf",
+      "performed_by": "verifier",
+      "status": "call_failed",
+      "recorded_at": "2026-04-06T12:21:34.813Z",
+      "call_error": "twilio_call_failed",
+      "call_error_detail": {
+        "code": 20003,
+        "message": "Authenticate",
+        "more_info": "https://www.twilio.com/docs/errors/20003",
+        "status": 401
+      },
+      "accountability_updated_at": "2026-04-06T12:21:35.231Z"
+    },
+    {
+      "id": "act-1775565770360-qg7amp9",
+      "reportId": "rep-1774890858691",
+      "at": "2026-04-07T12:42:50.360Z",
+      "actionType": "closure",
+      "label": "Closed — no action / resolved",
+      "summary": "Closed from verifier workspace.",
+      "no_action_reason": "Closed from verifier workspace.",
+      "performed_by": "verifier",
+      "recorded_at": "2026-04-07T12:42:50.360Z"
+    },
+    {
+      "id": "act-1775565773900-jclwupg",
+      "reportId": "rep-1774890858691",
+      "at": "2026-04-07T12:42:53.900Z",
+      "actionType": "escalate_emergency",
+      "label": "Emergency risk escalation",
+      "summary": "",
+      "performed_by": "verifier",
+      "recorded_at": "2026-04-07T12:42:53.899Z",
+      "response_recorded_at": "2026-04-07T12:47:45.840Z",
+      "response_summary": "sdfsd",
+      "resolution": "ffff",
+      "no_action_reason": "adfasdf",
+      "accountability_updated_at": "2026-04-07T12:47:45.840Z"
+    },
+    {
+      "id": "act-1775565775797-z1a59k3",
+      "reportId": "rep-1774890858691",
+      "at": "2026-04-07T12:42:55.797Z",
+      "actionType": "legal_referral",
+      "label": "Legal referral",
+      "summary": "",
+      "performed_by": "verifier",
+      "recorded_at": "2026-04-07T12:42:55.796Z"
+    },
+    {
+      "id": "act-1775565779222-405s8ay",
+      "reportId": "rep-1774890858691",
+      "at": "2026-04-07T12:42:59.222Z",
+      "actionType": "internal_followup",
+      "label": "Internal follow-up (task)",
+      "summary": "",
+      "performed_by": "verifier",
+      "recorded_at": "2026-04-07T12:42:59.221Z"
+    }
+  ],
+  "caseStates": {
+    "rep-1775346235370": {
+      "disposition": "closed_no_action",
+      "assignedVerifier": "",
+      "assignedSupervisor": "",
+      "deadline": null,
+      "redactionNotes": "",
+      "reporterFacingStatus": "verified",
+      "lastReviewedBy": "verifier",
+      "lastReviewedAt": "2026-04-06T10:33:36.061Z",
+      "updatedAt": "2026-04-06T10:33:36.062Z",
+      "updatedBy": "verifier"
+    },
+    "rep-1774890858691": {
+      "disposition": "urgent",
+      "assignedVerifier": "",
+      "assignedSupervisor": "",
+      "deadline": null,
+      "redactionNotes": "",
+      "reporterFacingStatus": "under_review",
+      "lastReviewedBy": "verifier",
+      "lastReviewedAt": "2026-04-07T12:43:06.423Z",
+      "updatedAt": "2026-04-07T12:43:06.424Z",
+      "updatedBy": "verifier"
+    }
+  }
+}
