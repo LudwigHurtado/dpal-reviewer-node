@@ -9,6 +9,7 @@
     "dev:api": "node server/index.mjs",
     "dev:all": "concurrently -k \"npm run dev:api\" \"npm run dev\"",
     "test:reviewer-cases": "node server/dev/reviewerCasesSmoke.mjs",
+    "test:field-os-bridge-http": "node server/dev/fieldOsBridgeHttpSmoke.mjs",
     "start": "node server/index.mjs",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
