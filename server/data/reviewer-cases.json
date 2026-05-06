@@ -1,0 +1,28 @@
+{
+  "cases": {
+    "smoke-1778066287817": {
+      "caseId": "smoke-1778066287817",
+      "source": "field_os_super_agent",
+      "goal": "Smoke test reviewer bridge",
+      "claimLabels": {
+        "blockchain_anchored": false,
+        "human_verified": false
+      },
+      "reportId": "field-os-smoke-1778066287817",
+      "status": "needs_more_evidence",
+      "humanVerified": false,
+      "reviewerNotes": [
+        {
+          "note": "smoke note",
+          "at": "2026-05-06T11:18:08.173Z",
+          "reviewerId": "smoke-tester"
+        }
+      ],
+      "reviewedAt": "2026-05-06T11:18:08.185Z",
+      "reviewerId": "smoke-tester",
+      "decision": "needs_more_evidence",
+      "createdAt": "2026-05-06T11:18:07.818Z",
+      "updatedAt": "2026-05-06T11:18:08.185Z"
+    }
+  }
+}

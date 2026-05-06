@@ -150,3 +150,34 @@ export interface VerifierActionResponse {
   script?: string;
   caseState?: VerifierCaseState;
 }
+
+export type ReviewerCaseStatus =
+  | 'pending_review'
+  | 'needs_more_evidence'
+  | 'verified'
+  | 'rejected'
+  | 'escalated'
+  | 'closed';
+
+export interface ReviewerCaseRecord {
+  caseId: string;
+  reportId: string;
+  source: 'field_os_super_agent' | string;
+  goal: string;
+  location?: string;
+  dateRange?: { startDate?: string; endDate?: string };
+  claimLabels?: Record<string, boolean>;
+  limitations?: string[];
+  evidenceTimeline?: unknown[];
+  executionTraces?: unknown[];
+  mappedWorkflows?: string[];
+  finalActionsBlocked?: boolean;
+  humanApprovalRequired?: boolean;
+  status: ReviewerCaseStatus;
+  humanVerified: boolean;
+  reviewerNotes?: Array<{ note?: string; at?: string; reviewerId?: string }>;
+  reviewedAt?: string | null;
+  reviewerId?: string | null;
+  decision?: string | null;
+  updatedAt?: string;
+}

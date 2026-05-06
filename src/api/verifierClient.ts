@@ -1,4 +1,6 @@
 import type {
+  ReviewerCaseRecord,
+  ReviewerCaseStatus,
   VerifierActionResponse,
   VerifierAiTriage,
   VerifierCaseState,
@@ -286,6 +288,57 @@ export async function postCloseCase(
   const data = await res.json();
   if (!res.ok) throw new Error(JSON.stringify(data));
   return data as VerifierActionResponse;
+}
+
+export async function fetchReviewerCases(): Promise<{ ok: boolean; cases: ReviewerCaseRecord[] }> {
+  const url = `${verifierRoot()}/cases`;
+  const res = await fetch(url, { headers: headers() });
+  const data = (await parseJsonSafe(res)) as { ok?: boolean; cases?: ReviewerCaseRecord[] };
+  if (!res.ok) throw httpError(res, url, data as Record<string, unknown>);
+  return { ok: Boolean(data.ok), cases: Array.isArray(data.cases) ? data.cases : [] };
+}
+
+export async function patchReviewerCaseStatus(
+  caseId: string,
+  body: {
+    status: ReviewerCaseStatus;
+    reviewerNote?: string;
+    reviewerId?: string;
+    decision?: string;
+  },
+): Promise<{
+  ok: boolean;
+  caseId: string;
+  reportId: string;
+  status: ReviewerCaseStatus;
+  humanVerified: boolean;
+  reviewerNotes: Array<{ note?: string; at?: string; reviewerId?: string }>;
+  reviewedAt: string | null;
+  reviewerId: string | null;
+  decision: string | null;
+  updatedAt: string | null;
+}> {
+  const id = encodeURIComponent(caseId);
+  const url = `${verifierRoot()}/cases/${id}/status`;
+  const res = await fetch(url, {
+    method: 'PATCH',
+    headers: headers(true),
+    body: JSON.stringify(performedByBody(body as Record<string, unknown>)),
+  });
+  const data = (await parseJsonSafe(res)) as Record<string, unknown>;
+  if (!res.ok) throw httpError(res, url, data);
+  return data as {
+    ok: boolean;
+    caseId: string;
+    reportId: string;
+    status: ReviewerCaseStatus;
+    humanVerified: boolean;
+    reviewerNotes: Array<{ note?: string; at?: string; reviewerId?: string }>;
+    reviewedAt: string | null;
+    reviewerId: string | null;
+    decision: string | null;
+    updatedAt: string | null;
+  };
 }
 
 export type { VerifierCaseState };

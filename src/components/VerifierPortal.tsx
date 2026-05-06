@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   fetchVerifierQueue,
+  fetchReviewerCases,
   fetchVerifierReportDetail,
   getVerifierIdentity,
+  patchReviewerCaseStatus,
   postAiTriage,
   postOutboundAction,
   postRequestEvidence,
@@ -20,6 +22,7 @@ import type {
   VerifierDetailMeta,
   VerifierQueueRow,
   VerifierReportDetail,
+  ReviewerCaseRecord,
   TimelineEvent,
   VerifierSituationMessage,
 } from '../verifier/types';
@@ -202,6 +205,9 @@ export function VerifierPortal() {
   const [outboundPhone, setOutboundPhone] = useState('');
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [reviewerCases, setReviewerCases] = useState<ReviewerCaseRecord[]>([]);
+  const [selectedReviewerCaseId, setSelectedReviewerCaseId] = useState<string | null>(null);
+  const [reviewerNoteDraft, setReviewerNoteDraft] = useState('');
 
   const loadQueue = useCallback(async () => {
     setLoading(true);
@@ -209,6 +215,8 @@ export function VerifierPortal() {
     setFeedDebug(null);
     try {
       const data = await fetchVerifierQueue();
+      const reviewerCasesData = await fetchReviewerCases().catch(() => ({ ok: false, cases: [] as ReviewerCaseRecord[] }));
+      setReviewerCases(reviewerCasesData.cases || []);
       const src = data.source || '';
       setSource(src);
       setFeedDebug(data.debug ?? null);
@@ -349,6 +357,10 @@ export function VerifierPortal() {
   const selected = useMemo(
     () => reports.find((r) => r.id === selectedId) || filtered[0],
     [reports, selectedId, filtered],
+  );
+  const selectedReviewerCase = useMemo(
+    () => reviewerCases.find((item) => item.caseId === selectedReviewerCaseId) || null,
+    [reviewerCases, selectedReviewerCaseId],
   );
 
   const playbook = selected ? categoryPlaybooks[selected.categoryKey as CategoryKey] : null;
@@ -546,6 +558,24 @@ export function VerifierPortal() {
       setNotice(e instanceof Error ? e.message : String(e));
     } finally {
       setAiBusy(false);
+    }
+  };
+
+  const updateReviewerCase = async (status: 'needs_more_evidence' | 'verified' | 'rejected' | 'escalated') => {
+    if (!selectedReviewerCase?.caseId) return;
+    setBusy(true);
+    try {
+      await patchReviewerCaseStatus(selectedReviewerCase.caseId, {
+        status,
+        reviewerNote: reviewerNoteDraft,
+      });
+      setReviewerNoteDraft('');
+      setNotice(`Field OS case marked: ${status.replaceAll('_', ' ')}`);
+      await loadQueue();
+    } catch (e: unknown) {
+      setNotice(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -748,6 +778,121 @@ export function VerifierPortal() {
           </div>
 
           <div className="grid-dashboard">
+            <div className="panel span-12">
+              <div className="panel-header">
+                <h3>Field OS Super Agent submissions</h3>
+                <span className="badge">{reviewerCases.length}</span>
+              </div>
+              <div className="panel-body">
+                {reviewerCases.length === 0 ? (
+                  <p className="text-muted" style={{ fontSize: '0.78rem', margin: 0 }}>
+                    No Field OS cases submitted yet.
+                  </p>
+                ) : (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '0.65rem' }}>
+                    {reviewerCases.map((item) => (
+                      <button
+                        key={item.caseId}
+                        type="button"
+                        onClick={() => setSelectedReviewerCaseId(item.caseId)}
+                        style={{
+                          textAlign: 'left',
+                          padding: '0.65rem 0.75rem',
+                          borderRadius: 'var(--radius-lg)',
+                          border:
+                            selectedReviewerCaseId === item.caseId
+                              ? '1px solid rgba(212, 175, 55, 0.45)'
+                              : '1px solid var(--graphite-border)',
+                          background: selectedReviewerCaseId === item.caseId ? 'var(--bg-panel-hover)' : 'var(--bg-elevated)',
+                          color: 'inherit',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <div className="mono" style={{ fontSize: '0.65rem', color: 'var(--silver-dim)' }}>
+                          Field OS Super Agent · {item.caseId}
+                        </div>
+                        <div style={{ fontWeight: 600, fontSize: '0.8rem', marginTop: '0.2rem' }}>{item.goal}</div>
+                        <div className="text-muted" style={{ marginTop: '0.35rem', fontSize: '0.72rem' }}>
+                          {item.location || 'No location'} · {item.dateRange?.startDate || '—'} to {item.dateRange?.endDate || '—'}
+                        </div>
+                        <div style={{ marginTop: '0.45rem', display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+                          <span className="tag tag-sector">{item.status.replaceAll('_', ' ')}</span>
+                          <span className="tag">{item.humanVerified ? 'human-verified' : 'pending human verification'}</span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {selectedReviewerCase ? (
+                  <div style={{ marginTop: '0.9rem', border: '1px solid var(--graphite-border)', borderRadius: '8px', padding: '0.8rem' }}>
+                    <div className="section-title">Selected Field OS case</div>
+                    <p style={{ fontSize: '0.78rem', marginTop: '0.35rem' }}>{selectedReviewerCase.goal}</p>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.5rem' }}>
+                      <div className="text-muted" style={{ fontSize: '0.72rem' }}>
+                        <strong>Location:</strong> {selectedReviewerCase.location || '—'}
+                      </div>
+                      <div className="text-muted" style={{ fontSize: '0.72rem' }}>
+                        <strong>Date range:</strong> {selectedReviewerCase.dateRange?.startDate || '—'} to {selectedReviewerCase.dateRange?.endDate || '—'}
+                      </div>
+                      <div className="text-muted" style={{ fontSize: '0.72rem' }}>
+                        <strong>Mapped workflows:</strong> {(selectedReviewerCase.mappedWorkflows || []).join(', ') || 'None'}
+                      </div>
+                      <div className="text-muted" style={{ fontSize: '0.72rem' }}>
+                        <strong>Final actions blocked:</strong> {selectedReviewerCase.finalActionsBlocked ? 'Yes' : 'No'}
+                      </div>
+                    </div>
+                    <div style={{ marginTop: '0.55rem', fontSize: '0.72rem' }}>
+                      <strong>Claim labels:</strong>{' '}
+                      {Object.entries(selectedReviewerCase.claimLabels || {})
+                        .filter(([, value]) => Boolean(value))
+                        .map(([key]) => key)
+                        .join(', ') || 'None'}
+                    </div>
+                    <div style={{ marginTop: '0.55rem', fontSize: '0.72rem' }}>
+                      <strong>Limitations:</strong>{' '}
+                      {(selectedReviewerCase.limitations || []).join(' | ') || 'None'}
+                    </div>
+                    <div style={{ marginTop: '0.55rem', fontSize: '0.72rem' }}>
+                      <strong>Evidence timeline summary:</strong> {(selectedReviewerCase.evidenceTimeline || []).length} events
+                    </div>
+                    <div style={{ marginTop: '0.35rem', fontSize: '0.72rem' }}>
+                      <strong>Execution trace summary:</strong> {(selectedReviewerCase.executionTraces || []).length} entries
+                    </div>
+                    <textarea
+                      value={reviewerNoteDraft}
+                      onChange={(e) => setReviewerNoteDraft(e.target.value)}
+                      rows={3}
+                      placeholder="Reviewer note"
+                      style={{
+                        width: '100%',
+                        marginTop: '0.55rem',
+                        padding: '0.5rem',
+                        background: 'var(--bg-deep)',
+                        border: '1px solid var(--graphite-border)',
+                        borderRadius: '6px',
+                        color: 'var(--silver)',
+                        fontFamily: 'inherit',
+                      }}
+                    />
+                    <div style={{ marginTop: '0.55rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                      <button type="button" className="btn" disabled={busy} onClick={() => void updateReviewerCase('needs_more_evidence')}>
+                        Mark needs more evidence
+                      </button>
+                      <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void updateReviewerCase('verified')}>
+                        Mark verified
+                      </button>
+                      <button type="button" className="btn" disabled={busy} onClick={() => void updateReviewerCase('rejected')}>
+                        Reject claim
+                      </button>
+                      <button type="button" className="btn" disabled={busy} onClick={() => void updateReviewerCase('escalated')}>
+                        Escalate
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            </div>
             <div className="panel span-4">
               <div className="panel-header">
                 <h3>Live queue</h3>

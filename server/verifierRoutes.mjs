@@ -33,6 +33,13 @@ import {
   generateVoiceAiTurn,
   buildReportContext,
 } from './lib/verifierVoice.mjs';
+import {
+  REVIEWER_CASE_STATUSES,
+  getReviewerCase,
+  listReviewerCases,
+  patchReviewerCaseStatus,
+  upsertReviewerCase,
+} from './lib/reviewerCasesStore.mjs';
 
 const DISPOSITIONS = new Set([
   'under_review',
@@ -55,6 +62,99 @@ function syncDispositionUpstream(reportId, disposition, performedBy, extraNote =
 
 export function createVerifierPortalRouter() {
   const router = Router();
+
+  router.get('/cases', (_req, res) => {
+    try {
+      const cases = listReviewerCases();
+      return res.json({ ok: true, cases });
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: String(e?.message || e) });
+    }
+  });
+
+  router.post('/cases', (req, res) => {
+    try {
+      const body = req.body || {};
+      const caseId = String(body.caseId || '').trim();
+      const goal = String(body.goal || '').trim();
+      if (!caseId) return res.status(400).json({ ok: false, error: 'caseId is required' });
+      if (!goal) return res.status(400).json({ ok: false, error: 'goal is required' });
+
+      const saved = upsertReviewerCase({
+        ...body,
+        caseId,
+        goal,
+        source: 'field_os_super_agent',
+      });
+      return res.json({
+        ok: true,
+        caseId: saved.caseId,
+        reportId: saved.reportId,
+        status: saved.status,
+        reviewUrl: `/verifier/reports/${saved.reportId}`,
+        message: 'Case submitted to Reviewer Node for human verification.',
+      });
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: String(e?.message || e) });
+    }
+  });
+
+  router.get('/cases/:caseId/status', (req, res) => {
+    try {
+      const caseId = decodeURIComponent(req.params.caseId || '').trim();
+      const row = getReviewerCase(caseId);
+      if (!row) return res.status(404).json({ ok: false, error: 'case_not_found' });
+      return res.json({
+        caseId: row.caseId,
+        reportId: row.reportId,
+        status: row.status,
+        humanVerified: Boolean(row.humanVerified),
+        reviewerNotes: Array.isArray(row.reviewerNotes) ? row.reviewerNotes : [],
+        reviewedAt: row.reviewedAt || null,
+        reviewerId: row.reviewerId || null,
+        decision: row.decision || null,
+        updatedAt: row.updatedAt || null,
+      });
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: String(e?.message || e) });
+    }
+  });
+
+  router.patch('/cases/:caseId/status', (req, res) => {
+    try {
+      const caseId = decodeURIComponent(req.params.caseId || '').trim();
+      const status = String(req.body?.status || '').trim();
+      if (!REVIEWER_CASE_STATUSES.has(status)) {
+        return res.status(400).json({
+          ok: false,
+          error: 'invalid_status',
+          allowed: [...REVIEWER_CASE_STATUSES],
+        });
+      }
+      const who = getVerifierIdentity(req);
+      const patched = patchReviewerCaseStatus(caseId, {
+        status,
+        reviewerNote: req.body?.reviewerNote,
+        reviewerId: req.body?.reviewerId || who,
+        decision: req.body?.decision,
+      });
+      if (!patched) return res.status(404).json({ ok: false, error: 'case_not_found' });
+      return res.json({
+        ok: true,
+        caseId: patched.caseId,
+        reportId: patched.reportId,
+        status: patched.status,
+        humanVerified: Boolean(patched.humanVerified),
+        reviewerNotes: patched.reviewerNotes || [],
+        reviewedAt: patched.reviewedAt || null,
+        reviewerId: patched.reviewerId || null,
+        decision: patched.decision || null,
+        updatedAt: patched.updatedAt || null,
+      });
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: String(e?.message || e) });
+    }
+  });
 
   /** Which email providers are configured (no secrets). */
   router.get('/email/status', (_req, res) => {
