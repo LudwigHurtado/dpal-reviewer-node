@@ -646,7 +646,7 @@ export function VerifierPortal() {
               borderRadius: '8px',
               border: `1px solid ${source === 'upstream_empty' ? 'rgba(59, 130, 246, 0.35)' : 'rgba(248, 113, 113, 0.4)'}`,
               background:
-                source === 'upstream_empty' ? 'rgba(59, 130, 246, 0.1)' : 'rgba(248, 113, 113, 0.08)',
+                source === 'upstream_empty' ? 'rgba(20, 184, 166, 0.12)' : 'rgba(248, 113, 113, 0.08)',
               fontSize: '0.78rem',
               lineHeight: 1.45,
               maxWidth: '52rem',
@@ -728,8 +728,8 @@ export function VerifierPortal() {
             role="status"
             style={{
               padding: '0.5rem 1rem',
-              background: 'rgba(59, 130, 246, 0.15)',
-              borderBottom: '1px solid rgba(59, 130, 246, 0.3)',
+              background: 'rgba(20, 184, 166, 0.16)',
+              borderBottom: '1px solid rgba(20, 184, 166, 0.35)',
               fontSize: '0.8rem',
               display: 'flex',
               justifyContent: 'space-between',
@@ -924,12 +924,12 @@ export function VerifierPortal() {
                       color: '#f8fafc',
                     }}
                   >
-                    <option value="all" style={{ color: '#111827', background: '#ffffff' }}>All categories</option>
-                    <option value="environmental" style={{ color: '#111827', background: '#ffffff' }}>Environmental</option>
-                    <option value="housing" style={{ color: '#111827', background: '#ffffff' }}>Housing</option>
-                    <option value="labor" style={{ color: '#111827', background: '#ffffff' }}>Labor</option>
-                    <option value="public_safety" style={{ color: '#111827', background: '#ffffff' }}>Public safety</option>
-                    <option value="medical" style={{ color: '#111827', background: '#ffffff' }}>Medical</option>
+                    <option value="all">All categories</option>
+                    <option value="environmental">Environmental</option>
+                    <option value="housing">Housing</option>
+                    <option value="labor">Labor</option>
+                    <option value="public_safety">Public safety</option>
+                    <option value="medical">Medical</option>
                   </select>
                   <div className="text-muted" style={{ fontSize: '0.65rem', marginTop: '0.25rem' }}>
                     Showing up to 20 most relevant results per search/category.
@@ -1216,7 +1216,7 @@ export function VerifierPortal() {
                               borderRadius: 'var(--radius-lg)',
                               padding: '0.75rem',
                               marginBottom: '0.75rem',
-                              background: 'rgba(59, 130, 246, 0.08)',
+                              background: 'rgba(20, 184, 166, 0.1)',
                             }}
                           >
                             <div className="section-title">AI Verifier Copilot</div>
@@ -1503,7 +1503,7 @@ export function VerifierPortal() {
                                     border: '1px solid var(--graphite-border)',
                                     borderRadius: '6px',
                                     fontSize: '0.78rem',
-                                    background: m.isSystem ? 'rgba(59, 130, 246, 0.08)' : 'var(--bg-elevated)',
+                                    background: m.isSystem ? 'rgba(20, 184, 166, 0.1)' : 'var(--bg-elevated)',
                                   }}
                                 >
                                   <div className="mono" style={{ fontSize: '0.62rem', color: 'var(--silver-dim)' }}>
