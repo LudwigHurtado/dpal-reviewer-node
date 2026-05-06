@@ -171,8 +171,31 @@ export interface ReviewerCaseRecord {
   evidenceTimeline?: unknown[];
   executionTraces?: unknown[];
   mappedWorkflows?: string[];
+  pendingAdapters?: string[];
   finalActionsBlocked?: boolean;
   humanApprovalRequired?: boolean;
+  approvalStatus?: Record<string, boolean>;
+  nextRecommendedAction?: string;
+  analysisSummaries?: {
+    water?: Record<string, unknown>;
+    earthObservation?: Record<string, unknown>;
+    pollution?: Record<string, unknown>;
+    carbonViu?: Record<string, unknown>;
+  };
+  evidenceAttachments?: Array<{
+    id?: string;
+    type?: string;
+    title?: string;
+    description?: string;
+    url?: string;
+    thumbnailUrl?: string;
+    source?: string;
+    workflowId?: string;
+    claimLabels?: Record<string, boolean>;
+    createdAt?: string;
+  }>;
+  subAgentOutputs?: unknown[];
+  workflowPreviewArtifacts?: unknown[];
   status: ReviewerCaseStatus;
   humanVerified: boolean;
   reviewerNotes?: Array<{ note?: string; at?: string; reviewerId?: string }>;

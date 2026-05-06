@@ -30,6 +30,22 @@ import { demoVerifierReports } from '../data/verifierDemo';
 import { resolveVerifierMediaUrl } from '../lib/mediaUrl';
 
 type Tab = 'verify' | 'actions' | 'history' | 'routing' | 'situation';
+const CLAIM_LABEL_KEYS = [
+  'observed',
+  'calculated',
+  'imported',
+  'user_submitted',
+  'ai_inferred',
+  'pending_verification',
+  'human_verified',
+  'blockchain_anchored',
+] as const;
+
+function isDevTestCase(item: ReviewerCaseRecord): boolean {
+  const caseId = String(item.caseId || '').toLowerCase();
+  const goal = String(item.goal || '').toLowerCase();
+  return caseId.startsWith('smoke-') || caseId.startsWith('case-http-smoke-') || goal.includes('smoke test');
+}
 
 function severityStyle(s: Severity): string {
   const map: Record<Severity, string> = {
@@ -208,6 +224,7 @@ export function VerifierPortal() {
   const [reviewerCases, setReviewerCases] = useState<ReviewerCaseRecord[]>([]);
   const [selectedReviewerCaseId, setSelectedReviewerCaseId] = useState<string | null>(null);
   const [reviewerNoteDraft, setReviewerNoteDraft] = useState('');
+  const [showDevTestCases, setShowDevTestCases] = useState(false);
 
   const loadQueue = useCallback(async () => {
     setLoading(true);
@@ -361,6 +378,10 @@ export function VerifierPortal() {
   const selectedReviewerCase = useMemo(
     () => reviewerCases.find((item) => item.caseId === selectedReviewerCaseId) || null,
     [reviewerCases, selectedReviewerCaseId],
+  );
+  const visibleReviewerCases = useMemo(
+    () => reviewerCases.filter((item) => showDevTestCases || !isDevTestCase(item)),
+    [reviewerCases, showDevTestCases],
   );
 
   const playbook = selected ? categoryPlaybooks[selected.categoryKey as CategoryKey] : null;
@@ -781,16 +802,20 @@ export function VerifierPortal() {
             <div className="panel span-12">
               <div className="panel-header">
                 <h3>Field OS Super Agent submissions</h3>
-                <span className="badge">{reviewerCases.length}</span>
+                <span className="badge">{visibleReviewerCases.length}</span>
               </div>
               <div className="panel-body">
-                {reviewerCases.length === 0 ? (
+                <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.45rem', marginBottom: '0.7rem', fontSize: '0.74rem' }}>
+                  <input type="checkbox" checked={showDevTestCases} onChange={(e) => setShowDevTestCases(e.target.checked)} />
+                  Show dev test cases
+                </label>
+                {visibleReviewerCases.length === 0 ? (
                   <p className="text-muted" style={{ fontSize: '0.78rem', margin: 0 }}>
                     No Field OS cases submitted yet.
                   </p>
                 ) : (
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '0.65rem' }}>
-                    {reviewerCases.map((item) => (
+                    {visibleReviewerCases.map((item) => (
                       <button
                         key={item.caseId}
                         type="button"
@@ -811,6 +836,11 @@ export function VerifierPortal() {
                         <div className="mono" style={{ fontSize: '0.65rem', color: 'var(--silver-dim)' }}>
                           Field OS Super Agent · {item.caseId}
                         </div>
+                        {isDevTestCase(item) && (
+                          <div className="tag tag-escalation" style={{ marginTop: '0.25rem' }}>
+                            DEV TEST CASE — not real evidence
+                          </div>
+                        )}
                         <div style={{ fontWeight: 600, fontSize: '0.8rem', marginTop: '0.2rem' }}>{item.goal}</div>
                         <div className="text-muted" style={{ marginTop: '0.35rem', fontSize: '0.72rem' }}>
                           {item.location || 'No location'} · {item.dateRange?.startDate || '—'} to {item.dateRange?.endDate || '—'}
@@ -827,8 +857,19 @@ export function VerifierPortal() {
                 {selectedReviewerCase ? (
                   <div style={{ marginTop: '0.9rem', border: '1px solid var(--graphite-border)', borderRadius: '8px', padding: '0.8rem' }}>
                     <div className="section-title">Selected Field OS case</div>
+                    {isDevTestCase(selectedReviewerCase) && (
+                      <p style={{ margin: '0.2rem 0 0.5rem', color: '#fca5a5', fontSize: '0.74rem', fontWeight: 600 }}>
+                        DEV TEST CASE — not real evidence
+                      </p>
+                    )}
                     <p style={{ fontSize: '0.78rem', marginTop: '0.35rem' }}>{selectedReviewerCase.goal}</p>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.5rem' }}>
+                      <div className="text-muted" style={{ fontSize: '0.72rem' }}>
+                        <strong>Source:</strong> {selectedReviewerCase.source || 'field_os_super_agent'}
+                      </div>
+                      <div className="text-muted" style={{ fontSize: '0.72rem' }}>
+                        <strong>Status:</strong> {String(selectedReviewerCase.status || 'pending_review').replaceAll('_', ' ')}
+                      </div>
                       <div className="text-muted" style={{ fontSize: '0.72rem' }}>
                         <strong>Location:</strong> {selectedReviewerCase.location || '—'}
                       </div>
@@ -859,6 +900,60 @@ export function VerifierPortal() {
                     <div style={{ marginTop: '0.35rem', fontSize: '0.72rem' }}>
                       <strong>Execution trace summary:</strong> {(selectedReviewerCase.executionTraces || []).length} entries
                     </div>
+                    <div style={{ marginTop: '0.35rem', fontSize: '0.72rem' }}>
+                      <strong>Pending adapters:</strong> {(selectedReviewerCase.pendingAdapters || []).join(', ') || 'None'}
+                    </div>
+                    <div style={{ marginTop: '0.55rem' }}>
+                      <strong style={{ fontSize: '0.72rem' }}>Claim safety labels:</strong>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem', marginTop: '0.25rem' }}>
+                        {CLAIM_LABEL_KEYS.map((key) => (
+                          <span key={key} className="tag" style={{ opacity: selectedReviewerCase.claimLabels?.[key] ? 1 : 0.55 }}>
+                            {key}: {selectedReviewerCase.claimLabels?.[key] ? 'true' : 'false'}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                    <div style={{ marginTop: '0.55rem' }}>
+                      <strong style={{ fontSize: '0.72rem' }}>Analysis summaries</strong>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.45rem', marginTop: '0.3rem' }}>
+                        {(['water', 'earthObservation', 'pollution', 'carbonViu'] as const).map((key) => {
+                          const block = selectedReviewerCase.analysisSummaries?.[key];
+                          return (
+                            <div key={key} style={{ border: '1px solid var(--graphite-border)', borderRadius: '6px', padding: '0.45rem' }}>
+                              <div style={{ fontSize: '0.7rem', fontWeight: 700 }}>{key}</div>
+                              <div style={{ fontSize: '0.7rem', marginTop: '0.2rem', color: 'var(--silver-dim)' }}>
+                                {block ? String((block as Record<string, unknown>).summary || 'Summary provided') : 'No summary provided'}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    <div style={{ marginTop: '0.55rem' }}>
+                      <strong style={{ fontSize: '0.72rem' }}>Evidence attachments</strong>
+                      {(selectedReviewerCase.evidenceAttachments || []).length === 0 ? (
+                        <p className="text-muted" style={{ marginTop: '0.2rem', fontSize: '0.72rem' }}>No attachments submitted.</p>
+                      ) : (
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '0.5rem', marginTop: '0.3rem' }}>
+                          {(selectedReviewerCase.evidenceAttachments || []).map((att, idx) => (
+                            <div key={`${att.id || 'att'}-${idx}`} style={{ border: '1px solid var(--graphite-border)', borderRadius: '6px', padding: '0.45rem' }}>
+                              <div style={{ fontSize: '0.72rem', fontWeight: 700 }}>{att.title || att.type || 'Attachment'}</div>
+                              <div style={{ fontSize: '0.68rem', color: 'var(--silver-dim)' }}>{att.description || 'No description'}</div>
+                              <div style={{ fontSize: '0.66rem', marginTop: '0.15rem' }}>Source: {att.source || 'Field OS'}</div>
+                              {att.thumbnailUrl ? <img src={att.thumbnailUrl} alt="" style={{ width: '100%', maxHeight: '120px', objectFit: 'cover', borderRadius: '4px', marginTop: '0.3rem' }} /> : null}
+                              {att.url ? (
+                                <a href={att.url} target="_blank" rel="noopener noreferrer" className="btn" style={{ marginTop: '0.35rem', display: 'inline-block', fontSize: '0.66rem' }}>
+                                  Open
+                                </a>
+                              ) : null}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <p style={{ marginTop: '0.55rem', fontSize: '0.72rem', color: '#fcd34d' }}>
+                      Human verification here does not imply blockchain anchoring.
+                    </p>
                     <textarea
                       value={reviewerNoteDraft}
                       onChange={(e) => setReviewerNoteDraft(e.target.value)}
