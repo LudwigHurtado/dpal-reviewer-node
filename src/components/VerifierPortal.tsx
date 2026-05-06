@@ -940,6 +940,9 @@ export function VerifierPortal() {
                               <div style={{ fontSize: '0.72rem', fontWeight: 700 }}>{att.title || att.type || 'Attachment'}</div>
                               <div style={{ fontSize: '0.68rem', color: 'var(--silver-dim)' }}>{att.description || 'No description'}</div>
                               <div style={{ fontSize: '0.66rem', marginTop: '0.15rem' }}>Source: {att.source || 'Field OS'}</div>
+                              <div style={{ fontSize: '0.66rem', marginTop: '0.15rem' }}>
+                                Captured: {att.createdAt ? new Date(att.createdAt).toLocaleString() : '—'}
+                              </div>
                               {att.thumbnailUrl ? <img src={att.thumbnailUrl} alt="" style={{ width: '100%', maxHeight: '120px', objectFit: 'cover', borderRadius: '4px', marginTop: '0.3rem' }} /> : null}
                               {att.url ? (
                                 <a href={att.url} target="_blank" rel="noopener noreferrer" className="btn" style={{ marginTop: '0.35rem', display: 'inline-block', fontSize: '0.66rem' }}>
