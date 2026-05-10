@@ -244,7 +244,10 @@ export function createVerifierPortalRouter() {
             upstreamConfigured: true,
             upstreamStatus: upstreamResult.upstreamStatus,
             ...(upstreamResult.upstreamUrl ? { upstreamUrl: upstreamResult.upstreamUrl } : {}),
-            message: 'Reviewer Node reached the upstream API, but that report ID was not found there.',
+            ...(upstreamResult.feedUrl ? { upstreamFeedUrl: upstreamResult.feedUrl } : {}),
+            message:
+              upstreamResult.message ||
+              'Reviewer Node reached the upstream API, but that report ID was not found there.',
           });
         }
         return res.status(statusForUpstreamReportResult(upstreamResult)).json({
@@ -353,6 +356,8 @@ export function createVerifierPortalRouter() {
             'resolution',
             'no_action_reason',
           ],
+          upstreamFallback: upstreamResult.fallback || null,
+          upstreamFeedUrl: upstreamResult.feedUrl || null,
         },
       });
     } catch (e) {

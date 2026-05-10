@@ -360,6 +360,138 @@ function parseReportJsonBody(body) {
   return null;
 }
 
+/** Same path join as detail: avoid `/api/api/...` when base ends with `/api`. */
+function joinUpstreamBaseAndPath(baseRaw, path) {
+  const base = String(baseRaw || '').replace(/\/$/, '');
+  let p = path.startsWith('/') ? path : `/${path}`;
+  if (base.endsWith('/api') && p.startsWith('/api/')) {
+    p = p.slice('/api'.length);
+  }
+  return `${base}${p}`;
+}
+
+/**
+ * Upstream reports feed URL (same contract as fetchUpstreamReports / verifier feed).
+ * @returns {{ feedUrl: string, pathForLog: string }}
+ */
+function buildUpstreamFeedFetchUrl(baseRaw) {
+  const base = String(baseRaw || '').replace(/\/$/, '');
+  let path = process.env.DPAL_UPSTREAM_REPORTS_PATH || '/api/reports/feed';
+  if (!path.startsWith('/')) path = `/${path}`;
+
+  let feedUrl = joinUpstreamBaseAndPath(base, path);
+  if (isFeedPath(path) && !/[?&]limit=/.test(feedUrl)) {
+    feedUrl += feedUrl.includes('?') ? '&' : '?';
+    feedUrl += `limit=${encodeURIComponent(process.env.DPAL_UPSTREAM_REPORTS_LIMIT || '120')}`;
+  }
+  return { feedUrl, pathForLog: path };
+}
+
+/** Detail 404 fallback: always request enough rows to find the id (task: limit=120). */
+function buildUpstreamFeedFallbackFetchUrl(baseRaw) {
+  const { feedUrl: initial, pathForLog } = buildUpstreamFeedFetchUrl(baseRaw);
+  try {
+    const u = new URL(initial);
+    u.searchParams.set('limit', '120');
+    return { feedUrl: u.toString(), pathForLog };
+  } catch {
+    const sep = initial.includes('?') ? '&' : '?';
+    return { feedUrl: `${initial}${sep}limit=120`, pathForLog };
+  }
+}
+
+function parseUpstreamFeedJsonToList(raw) {
+  if (Array.isArray(raw)) return raw;
+  if (raw?.ok === true && Array.isArray(raw.items)) return raw.items;
+  if (Array.isArray(raw?.reports)) return raw.reports;
+  if (Array.isArray(raw?.data)) return raw.data;
+  if (Array.isArray(raw?.items)) return raw.items;
+  return null;
+}
+
+function stringIdFromField(v) {
+  if (v == null) return '';
+  if (typeof v === 'object' && v.$oid != null) return String(v.$oid).trim();
+  const s = String(v).trim();
+  if (!s || s === '[object Object]') return '';
+  return s;
+}
+
+/** Collect id-like fields from a feed row (top-level + common payload nesting). */
+function feedItemIdStrings(item) {
+  if (!item || typeof item !== 'object') return [];
+  const keys = ['id', 'reportId', 'report_id', 'uuid', 'public_id', '_id'];
+  const out = [];
+  for (const k of keys) {
+    const s = stringIdFromField(item[k]);
+    if (s) out.push(s);
+  }
+  const p = item.payload;
+  if (p && typeof p === 'object') {
+    for (const k of ['id', 'reportId', 'report_id', 'uuid', 'public_id']) {
+      const s = stringIdFromField(p[k]);
+      if (s) out.push(s);
+    }
+  }
+  return [...new Set(out)];
+}
+
+function feedItemMatchesReportId(item, rawId) {
+  const want = String(rawId || '').trim();
+  if (!want) return false;
+  return feedItemIdStrings(item).some((id) => id === want);
+}
+
+function findFeedItemByReportId(list, rawId) {
+  if (!Array.isArray(list)) return null;
+  for (const item of list) {
+    if (feedItemMatchesReportId(item, rawId)) return item;
+  }
+  return null;
+}
+
+/**
+ * Fallback detail document from a feed row (GET /api/reports/:id returned 404).
+ * Same field contract as task spec; fills from nested `payload` when top-level is absent.
+ */
+function normalizeFeedItemToVerifierReport(matched, reportId) {
+  const rid = String(reportId || '').trim();
+  const idVal =
+    stringIdFromField(matched.reportId) ||
+    stringIdFromField(matched.id) ||
+    stringIdFromField(matched._id) ||
+    rid;
+  const p = matched.payload && typeof matched.payload === 'object' ? matched.payload : {};
+  const title = matched.title ?? p.title;
+  const description = matched.description ?? p.description;
+  const category = matched.category ?? p.category;
+  const location = matched.location || matched.city || p.location || p.city || '';
+  const severity = matched.severity ?? p.severity;
+  const opsStatus = matched.opsStatus ?? p.opsStatus;
+
+  return {
+    id: idVal,
+    reportId: idVal,
+    title,
+    description,
+    category,
+    severity,
+    opsStatus,
+    createdAt: matched.createdAt,
+    updatedAt: matched.updatedAt,
+    channel: matched.channel,
+    payload: {
+      title,
+      description,
+      category,
+      location,
+      severity,
+      opsStatus,
+      source: 'upstream_feed_fallback',
+    },
+  };
+}
+
 /**
  * Full report document from main API (Mongo anchor). Structured result for verifier + logging.
  * @returns {Promise<object>}
@@ -426,13 +558,116 @@ export async function fetchUpstreamReportById(reportId) {
   });
 
   if (upstreamStatus === 404) {
-    console.log('[reviewer-upstream] fetchUpstreamReportById: report not found (404)', { reportId: rawId });
+    console.log('[reviewer-upstream] fetchUpstreamReportById: detail endpoint returned 404', {
+      reportId: rawId,
+      upstreamPath: pathForLog,
+    });
+
+    const { feedUrl, pathForLog: feedPathLog } = buildUpstreamFeedFallbackFetchUrl(base);
+    console.log('[reviewer-upstream] fetchUpstreamReportById: feed fallback URL called', {
+      reportId: rawId,
+      feedPath: feedPathLog,
+      feedUrl,
+    });
+
+    let feedRes;
+    try {
+      feedRes = await fetch(feedUrl, { headers });
+    } catch (e) {
+      console.log('[reviewer-upstream] fetchUpstreamReportById: feed fallback network error', {
+        reportId: rawId,
+        message: String(e?.message || e),
+      });
+      return {
+        ok: false,
+        error: 'report_not_found',
+        upstreamConfigured: true,
+        upstreamStatus: 404,
+        upstreamUrl,
+        feedUrl,
+        message: 'Detail endpoint returned 404 and feed fallback did not contain the report.',
+      };
+    }
+
+    if (!feedRes.ok) {
+      console.log('[reviewer-upstream] fetchUpstreamReportById: feed fallback HTTP error', {
+        reportId: rawId,
+        feedStatus: feedRes.status,
+      });
+      return {
+        ok: false,
+        error: 'report_not_found',
+        upstreamConfigured: true,
+        upstreamStatus: 404,
+        upstreamUrl,
+        feedUrl,
+        message: 'Detail endpoint returned 404 and feed fallback did not contain the report.',
+      };
+    }
+
+    let feedRaw;
+    try {
+      feedRaw = await feedRes.json();
+    } catch (e) {
+      console.log('[reviewer-upstream] fetchUpstreamReportById: feed fallback not JSON', { reportId: rawId });
+      return {
+        ok: false,
+        error: 'report_not_found',
+        upstreamConfigured: true,
+        upstreamStatus: 404,
+        upstreamUrl,
+        feedUrl,
+        message: 'Detail endpoint returned 404 and feed fallback did not contain the report.',
+      };
+    }
+
+    const feedList = parseUpstreamFeedJsonToList(feedRaw);
+    if (!feedList) {
+      console.log('[reviewer-upstream] fetchUpstreamReportById: feed fallback unrecognized shape', {
+        reportId: rawId,
+      });
+      return {
+        ok: false,
+        error: 'report_not_found',
+        upstreamConfigured: true,
+        upstreamStatus: 404,
+        upstreamUrl,
+        feedUrl,
+        message: 'Detail endpoint returned 404 and feed fallback did not contain the report.',
+      };
+    }
+
+    const matched = findFeedItemByReportId(feedList, rawId);
+    if (!matched) {
+      console.log('[reviewer-upstream] fetchUpstreamReportById: feed fallback no matching item', {
+        reportId: rawId,
+        feedItemCount: feedList.length,
+      });
+      return {
+        ok: false,
+        error: 'report_not_found',
+        upstreamConfigured: true,
+        upstreamStatus: 404,
+        upstreamUrl,
+        feedUrl,
+        message: 'Detail endpoint returned 404 and feed fallback did not contain the report.',
+      };
+    }
+
+    const normalizedReport = normalizeFeedItemToVerifierReport(matched, rawId);
+    console.log('[reviewer-upstream] fetchUpstreamReportById: feed fallback match found', {
+      reportId: rawId,
+      resolvedId: normalizedReport.id,
+    });
+
     return {
-      ok: false,
-      error: 'report_not_found',
+      ok: true,
+      report: normalizedReport,
       upstreamConfigured: true,
-      upstreamStatus: 404,
+      upstreamStatus: 200,
       upstreamUrl,
+      fallback: 'feed',
+      feedUrl,
     };
   }
 
