@@ -17,6 +17,7 @@ import { getVoiceConfigStatus } from './lib/verifierVoice.mjs';
 
 const DATA_FILE = join(__dirname, 'data', 'dashboard.json');
 
+/** Listen on Railway's PORT when set; local dev may use REVIEWER_API_PORT or default 8787. */
 const PORT = Number(process.env.REVIEWER_API_PORT || process.env.PORT || 8787);
 const SSE_INTERVAL_MS = Number(process.env.REVIEWER_SSE_INTERVAL_MS || 12000);
 
@@ -169,13 +170,16 @@ app.use('/api/reviewer/v1/verifier', createVerifierPortalRouter());
 
 /** Health for load balancers / dev. */
 app.get('/api/reviewer/v1/health', (_req, res) => {
+  const upstreamConfigured = Boolean(process.env.DPAL_UPSTREAM_URL?.trim());
   res.json({
     ok: true,
-    service: 'dpal-reviewer-api',
-    version: '3',
-    upstream: Boolean(upstreamBase()),
-    sseMs: SSE_INTERVAL_MS,
+    service: 'dpal-reviewer-node',
+    upstreamConfigured,
+    upstreamOrigin: upstreamConfigured ? 'configured' : 'missing',
     verifierPortal: true,
+    version: '3',
+    upstream: upstreamConfigured,
+    sseMs: SSE_INTERVAL_MS,
     email: getEmailConfigStatus(),
     voice: getVoiceConfigStatus(),
     verifierAuditPath: getVerifierAuditFilePath(),

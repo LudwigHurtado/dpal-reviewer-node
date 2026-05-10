@@ -41,6 +41,15 @@ import {
   upsertReviewerCase,
 } from './lib/reviewerCasesStore.mjs';
 
+function statusForUpstreamReportResult(result) {
+  if (!result?.ok) {
+    if (result.error === 'upstream_not_configured') return 500;
+    if (result.error === 'report_not_found') return 404;
+    return 502;
+  }
+  return 200;
+}
+
 const DISPOSITIONS = new Set([
   'under_review',
   'verified',
@@ -213,9 +222,53 @@ export function createVerifierPortalRouter() {
       const reportId = decodeURIComponent(req.params.reportId || '').trim();
       if (!reportId) return res.status(400).json({ ok: false, error: 'missing_id' });
 
-      const doc = await fetchUpstreamReportById(reportId);
-      if (!doc || doc.error) {
-        return res.status(404).json({ ok: false, error: 'report_not_found' });
+      const upstreamResult = await fetchUpstreamReportById(reportId);
+      if (!upstreamResult.ok) {
+        const err = upstreamResult.error;
+        if (err === 'upstream_not_configured') {
+          return res.status(500).json({
+            ok: false,
+            error: 'upstream_not_configured',
+            reportId,
+            reviewerNode: true,
+            upstreamConfigured: false,
+            message: 'Reviewer Node is running, but DPAL_UPSTREAM_URL is not configured.',
+          });
+        }
+        if (err === 'report_not_found') {
+          return res.status(404).json({
+            ok: false,
+            error: 'report_not_found',
+            reportId,
+            reviewerNode: true,
+            upstreamConfigured: true,
+            upstreamStatus: upstreamResult.upstreamStatus,
+            ...(upstreamResult.upstreamUrl ? { upstreamUrl: upstreamResult.upstreamUrl } : {}),
+            message: 'Reviewer Node reached the upstream API, but that report ID was not found there.',
+          });
+        }
+        return res.status(statusForUpstreamReportResult(upstreamResult)).json({
+          ok: false,
+          error: err,
+          reportId,
+          reviewerNode: true,
+          upstreamConfigured: upstreamResult.upstreamConfigured,
+          ...(upstreamResult.upstreamStatus != null ? { upstreamStatus: upstreamResult.upstreamStatus } : {}),
+          ...(upstreamResult.upstreamUrl ? { upstreamUrl: upstreamResult.upstreamUrl } : {}),
+          ...(upstreamResult.message ? { message: upstreamResult.message } : {}),
+        });
+      }
+
+      const doc = upstreamResult.report;
+      if (!doc || (typeof doc === 'object' && doc.error)) {
+        return res.status(502).json({
+          ok: false,
+          error: 'upstream_error',
+          reportId,
+          reviewerNode: true,
+          upstreamConfigured: true,
+          message: 'Upstream returned an unexpected report payload.',
+        });
       }
 
       const p = doc.payload && typeof doc.payload === 'object' ? doc.payload : doc;
@@ -456,8 +509,20 @@ export function createVerifierPortalRouter() {
   router.post('/reports/:reportId/ai-triage', async (req, res) => {
     try {
       const reportId = decodeURIComponent(req.params.reportId || '').trim();
-      const doc = await fetchUpstreamReportById(reportId);
-      if (!doc || doc.error) return res.status(404).json({ ok: false, error: 'report_not_found' });
+      const upstreamResult = await fetchUpstreamReportById(reportId);
+      if (!upstreamResult.ok) {
+        return res.status(statusForUpstreamReportResult(upstreamResult)).json({
+          ok: false,
+          error: upstreamResult.error,
+          reportId,
+          reviewerNode: true,
+          upstreamConfigured: upstreamResult.upstreamConfigured,
+          ...(upstreamResult.upstreamStatus != null ? { upstreamStatus: upstreamResult.upstreamStatus } : {}),
+          ...(upstreamResult.upstreamUrl ? { upstreamUrl: upstreamResult.upstreamUrl } : {}),
+          ...(upstreamResult.message ? { message: upstreamResult.message } : {}),
+        });
+      }
+      const doc = upstreamResult.report;
       const p = doc.payload && typeof doc.payload === 'object' ? doc.payload : doc;
       const mergedUrls = collectImageUrlStringsFromReportShape(doc);
       const triage = await runVerifierAiTriage({
@@ -478,8 +543,20 @@ export function createVerifierPortalRouter() {
   router.post('/reports/:reportId/actions/call-script', async (req, res) => {
     try {
       const reportId = decodeURIComponent(req.params.reportId || '').trim();
-      const doc = await fetchUpstreamReportById(reportId);
-      if (!doc || doc.error) return res.status(404).json({ ok: false, error: 'report_not_found' });
+      const upstreamResult = await fetchUpstreamReportById(reportId);
+      if (!upstreamResult.ok) {
+        return res.status(statusForUpstreamReportResult(upstreamResult)).json({
+          ok: false,
+          error: upstreamResult.error,
+          reportId,
+          reviewerNode: true,
+          upstreamConfigured: upstreamResult.upstreamConfigured,
+          ...(upstreamResult.upstreamStatus != null ? { upstreamStatus: upstreamResult.upstreamStatus } : {}),
+          ...(upstreamResult.upstreamUrl ? { upstreamUrl: upstreamResult.upstreamUrl } : {}),
+          ...(upstreamResult.message ? { message: upstreamResult.message } : {}),
+        });
+      }
+      const doc = upstreamResult.report;
       const p = doc.payload && typeof doc.payload === 'object' ? doc.payload : doc;
       const script = await generateCallScript({
         title: p.title ?? doc.title,
@@ -581,8 +658,20 @@ export function createVerifierPortalRouter() {
       const toPhone = String(b.to_phone || b.destination_phone || '').trim();
       if (!toPhone) return res.status(400).json({ ok: false, error: 'missing_to_phone' });
 
-      const doc = await fetchUpstreamReportById(reportId);
-      if (!doc || doc.error) return res.status(404).json({ ok: false, error: 'report_not_found' });
+      const upstreamResult = await fetchUpstreamReportById(reportId);
+      if (!upstreamResult.ok) {
+        return res.status(statusForUpstreamReportResult(upstreamResult)).json({
+          ok: false,
+          error: upstreamResult.error,
+          reportId,
+          reviewerNode: true,
+          upstreamConfigured: upstreamResult.upstreamConfigured,
+          ...(upstreamResult.upstreamStatus != null ? { upstreamStatus: upstreamResult.upstreamStatus } : {}),
+          ...(upstreamResult.upstreamUrl ? { upstreamUrl: upstreamResult.upstreamUrl } : {}),
+          ...(upstreamResult.message ? { message: upstreamResult.message } : {}),
+        });
+      }
+      const doc = upstreamResult.report;
       const p = doc.payload && typeof doc.payload === 'object' ? doc.payload : doc;
       const report = {
         id: doc.id || reportId,
@@ -635,7 +724,8 @@ export function createVerifierPortalRouter() {
     try {
       const reportId = decodeURIComponent(String(req.query.reportId || '')).trim();
       const actionId = decodeURIComponent(String(req.query.actionId || '')).trim();
-      const doc = await fetchUpstreamReportById(reportId);
+      const upstreamResult = await fetchUpstreamReportById(reportId);
+      const doc = upstreamResult.ok ? upstreamResult.report : null;
       const p = doc?.payload && typeof doc.payload === 'object' ? doc.payload : doc || {};
       const report = {
         id: doc?.id || reportId,
@@ -668,7 +758,8 @@ export function createVerifierPortalRouter() {
       const turns = Array.isArray(prior.voice_turns) ? [...prior.voice_turns] : [];
       if (speech) turns.push({ role: 'caller', text: speech, at: new Date().toISOString() });
 
-      const doc = await fetchUpstreamReportById(reportId);
+      const upstreamResult = await fetchUpstreamReportById(reportId);
+      const doc = upstreamResult.ok ? upstreamResult.report : null;
       const p = doc?.payload && typeof doc.payload === 'object' ? doc.payload : doc || {};
       const report = {
         id: doc?.id || reportId,

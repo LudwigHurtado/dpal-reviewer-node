@@ -339,20 +339,166 @@ export async function fetchUpstreamSituationMessages(roomId) {
 }
 
 /**
- * Full report document from main API (Mongo anchor). Enables verifier detail panel.
+ * Join upstream origin + `/api/reports/...` without producing `/api/api/...` when the origin
+ * already ends with `/api` (common when DPAL_UPSTREAM_URL is set to the API root).
+ */
+export function buildUpstreamReportDetailUrl(baseRaw, encodedReportId) {
+  const base = String(baseRaw || '').replace(/\/$/, '');
+  const suffix = `/api/reports/${encodedReportId}`;
+  if (!base) return { upstreamUrl: '', pathForLog: suffix };
+  if (base.endsWith('/api') && suffix.startsWith('/api/')) {
+    const rest = suffix.slice('/api'.length);
+    return { upstreamUrl: `${base}${rest}`, pathForLog: rest };
+  }
+  return { upstreamUrl: `${base}${suffix}`, pathForLog: suffix };
+}
+
+function parseReportJsonBody(body) {
+  if (body && typeof body === 'object' && body.report && typeof body.report === 'object') return body.report;
+  if (body && typeof body === 'object' && body.data && typeof body.data === 'object') return body.data;
+  if (body && typeof body === 'object') return body;
+  return null;
+}
+
+/**
+ * Full report document from main API (Mongo anchor). Structured result for verifier + logging.
+ * @returns {Promise<object>}
  */
 export async function fetchUpstreamReportById(reportId) {
-  const base = process.env.DPAL_UPSTREAM_URL?.replace(/\/$/, '');
-  if (!base) return null;
-  const id = encodeURIComponent(String(reportId || '').trim());
-  if (!id) return null;
+  const rawId = String(reportId ?? '').trim();
+  const upstreamConfigured = Boolean(process.env.DPAL_UPSTREAM_URL?.trim());
+
+  console.log('[reviewer-upstream] fetchUpstreamReportById', {
+    reportId: rawId || '(empty)',
+    upstreamUrlEnvSet: upstreamConfigured,
+  });
+
+  if (!upstreamConfigured) {
+    return {
+      ok: false,
+      error: 'upstream_not_configured',
+      upstreamConfigured: false,
+    };
+  }
+
+  const base = process.env.DPAL_UPSTREAM_URL.trim().replace(/\/$/, '');
+  if (!rawId) {
+    console.log('[reviewer-upstream] fetchUpstreamReportById: empty report id after trim');
+    return {
+      ok: false,
+      error: 'upstream_error',
+      upstreamConfigured: true,
+      message: 'Missing report id.',
+    };
+  }
+
+  const encodedId = encodeURIComponent(rawId);
+  const { upstreamUrl, pathForLog } = buildUpstreamReportDetailUrl(base, encodedId);
+
   const headers = { Accept: 'application/json' };
   const auth = process.env.DPAL_UPSTREAM_AUTH_HEADER;
   if (auth) headers.Authorization = auth;
-  const res = await fetch(`${base}/api/reports/${id}`, { headers });
-  if (!res.ok) return null;
-  const body = await res.json();
-  if (body && typeof body === 'object' && body.report && typeof body.report === 'object') return body.report;
-  if (body && typeof body === 'object' && body.data && typeof body.data === 'object') return body.data;
-  return body;
+
+  let res;
+  try {
+    res = await fetch(upstreamUrl, { headers });
+  } catch (e) {
+    const message = String(e?.message || e);
+    console.log('[reviewer-upstream] fetchUpstreamReportById: network error', {
+      reportId: rawId,
+      upstreamPath: pathForLog,
+      message,
+    });
+    return {
+      ok: false,
+      error: 'upstream_network_error',
+      upstreamConfigured: true,
+      upstreamUrl,
+      message,
+    };
+  }
+
+  const upstreamStatus = res.status;
+  console.log('[reviewer-upstream] fetchUpstreamReportById: upstream response', {
+    reportId: rawId,
+    upstreamPath: pathForLog,
+    upstreamStatus,
+  });
+
+  if (upstreamStatus === 404) {
+    console.log('[reviewer-upstream] fetchUpstreamReportById: report not found (404)', { reportId: rawId });
+    return {
+      ok: false,
+      error: 'report_not_found',
+      upstreamConfigured: true,
+      upstreamStatus: 404,
+      upstreamUrl,
+    };
+  }
+
+  if (!res.ok) {
+    let detail = res.statusText || `HTTP ${upstreamStatus}`;
+    try {
+      const t = await res.text();
+      if (t && t.length < 400) detail = `${detail}: ${t}`;
+    } catch {
+      /* ignore */
+    }
+    console.log('[reviewer-upstream] fetchUpstreamReportById: upstream error', {
+      reportId: rawId,
+      upstreamStatus,
+      found: false,
+    });
+    return {
+      ok: false,
+      error: 'upstream_error',
+      upstreamConfigured: true,
+      upstreamStatus,
+      upstreamUrl,
+      message: detail,
+    };
+  }
+
+  let body;
+  try {
+    body = await res.json();
+  } catch (e) {
+    const message = `Upstream response was not valid JSON: ${String(e?.message || e)}`;
+    console.log('[reviewer-upstream] fetchUpstreamReportById: JSON parse failed', { reportId: rawId, upstreamStatus });
+    return {
+      ok: false,
+      error: 'upstream_error',
+      upstreamConfigured: true,
+      upstreamStatus,
+      upstreamUrl,
+      message,
+    };
+  }
+
+  const report = parseReportJsonBody(body);
+  const found = Boolean(report && typeof report === 'object');
+  console.log('[reviewer-upstream] fetchUpstreamReportById: parsed body', {
+    reportId: rawId,
+    upstreamStatus,
+    reportFound: found,
+  });
+
+  if (!found) {
+    return {
+      ok: false,
+      error: 'upstream_error',
+      upstreamConfigured: true,
+      upstreamStatus,
+      upstreamUrl,
+      message: 'Upstream returned JSON that did not contain a usable report object.',
+    };
+  }
+
+  return {
+    ok: true,
+    report,
+    upstreamConfigured: true,
+    upstreamStatus,
+    upstreamUrl,
+  };
 }
