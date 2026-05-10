@@ -10,7 +10,7 @@ Actions persist **locally** in `server/data/verifier-audit.json` until you map t
 
 - React + Vite + TypeScript — `src/components/VerifierPortal.tsx`
 - Express reviewer API — `server/index.mjs` + `server/verifierRoutes.mjs`
-- Optional upstream: set **`DPAL_UPSTREAM_URL`** to your **`dpal-ai-server`** host and **`DPAL_UPSTREAM_REPORTS_PATH=/api/reports/feed`**
+- Optional upstream: set **`DPAL_UPSTREAM_URL`** to your **`dpal-front-end/backend`** deployment origin and **`DPAL_UPSTREAM_REPORTS_PATH=/api/reports/feed`** (or the feed path your backend exposes)
 - Demo rows in the UI if the feed is empty (training data only)
 
 ## Run locally
@@ -100,7 +100,7 @@ If Railway’s build log says **Deploying as vite static site** and serves **Cad
 
 ### “404” on `/api/reviewer/v1/verifier/reports`
 
-That path exists **only** on the **Reviewer Node** server (`server/index.mjs`). If `VITE_API_BASE_URL` points at your **main** DPAL API (e.g. `web-production-…up.railway.app`), the browser will get **404** — the filing API does not mount the verifier routes. You need **two** services: (1) main API for `POST/GET /api/reports*`, (2) Reviewer API for `/api/reviewer/v1/verifier/*`, with `DPAL_UPSTREAM_URL` on (2) set to (1)’s origin.
+That path exists **only** on the **Reviewer Node** server (`server/index.mjs`). If `VITE_API_BASE_URL` points at your **main** DPAL backend (e.g. **`dpal-front-end/backend`** on Railway) instead of the reviewer API, the browser will get **404** — that backend does not mount verifier routes. You need **two** services: (1) main backend for `POST/GET /api/reports*`, (2) Reviewer API for `/api/reviewer/v1/verifier/*`, with `DPAL_UPSTREAM_URL` on (2) set to (1)’s origin.
 
 ## Live reports + reviewer opinions (production)
 
@@ -109,7 +109,7 @@ The static site (e.g. [dpal-reviewer-node on Vercel](https://dpal-reviewer-node.
 1. **Host the reviewer API** (`server/index.mjs`) on Railway, Render, Fly.io, a VPS, etc. Expose `GET /api/reviewer/v1/dashboard` and `POST /api/reviewer/v1/reports/:reportId/review`.
 2. **Point the UI at that API:** in Vercel → Project → Settings → Environment Variables, set **`VITE_API_BASE_URL`** to your API base, e.g. `https://your-api.example.com/api` (no trailing slash). Redeploy so Vite bakes it in.
 3. **Merge reports from main DPAL:** on the **API server**, set **`DPAL_UPSTREAM_URL`** to your main backend origin and **`DPAL_UPSTREAM_REPORTS_PATH`** to the path that returns a JSON array (or `{ reports | data | items }`). See `server/lib/upstream.mjs`. Put these in **`.env`** or **`.env.local`** in the project root (both are loaded when the API starts).
-4. **Same backend for filings and feed:** the main app’s **`VITE_API_BASE`** (or equivalent) must be the **same origin** as **`DPAL_UPSTREAM_URL`**. Reports and images only appear after successful **`POST /api/reports`** (or anchor) to that backend. Relative image paths (`/api/assets/…`) are resolved against **`DPAL_UPSTREAM_URL`** so thumbnails load in the Validator UI.
+4. **Same backend for filings and feed:** the main app’s **`VITE_API_BASE`** (or equivalent) must match the **same origin** you use as **`DPAL_UPSTREAM_URL`** on the reviewer API — typically your **`dpal-front-end/backend`** deploy. Reports and images only appear after successful **`POST /api/reports`** (or anchor) to that backend. Relative image paths (`/api/assets/…`) are resolved against **`DPAL_UPSTREAM_URL`** so thumbnails load in the Validator UI.
 5. **Hub “library” vs Validator:** the main app **hub** shows filings from **localStorage** plus whatever **`GET /api/reports/feed`** returns. The Validator **only** shows the **server** feed (plus audit data). Device-only drafts never appear in the Validator until they are posted to the API.
 6. **Public “Open report” links:** set **`VITE_DPAL_PUBLIC_WEB_URL`** on Vercel to your DPAL web app origin (e.g. `https://your-dpal-front.vercel.app`), **or** set **`DPAL_PUBLIC_REPORT_BASE`** on the API server to the same (links are built as `?reportId=<id>`).
 

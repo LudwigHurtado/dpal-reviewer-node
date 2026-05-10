@@ -2,7 +2,7 @@
 
 This file is **handwritten project memory** for assistants: architecture, conventions, pitfalls, and related repos. **Also read `AGENTS.md`** for the documentation map and **progress log**.
 
-**Last updated:** 2026-04-05
+**Last updated:** 2026-05-10
 
 ---
 
@@ -18,25 +18,22 @@ This file is **handwritten project memory** for assistants: architecture, conven
 
 ## Accounts, login, and where user names live (cross-repo)
 
-This workspace does **not** host the main account system by itself. **Login UI** and **MongoDB-backed users** were added in:
+This workspace does **not** host the main account system or primary filings API by itself. **Login UI** lives in **`dpal-front-end`**; the **HTTP API** this stack targets is **`dpal-front-end/backend`** (see that folder’s README and env), not **`dpal-ai-server`**.
 
-| Piece | Repo | Role |
-|--------|------|------|
+| Piece | Location | Role |
+|--------|----------|------|
 | Sign-in / sign-up pages, session in the browser | **`dpal-front-end`** | `AppBootstrap.tsx` registers routes **before** the main `App` catch-all. |
-| REST auth + `User` documents | **`dpal-ai-server`** | Express routes under **`/api/auth/*`**, admin **`/api/admin/*`**, Mongoose **`User`** model. |
+| REST API (reports feed, filings, help/aux routes per deploy) | **`dpal-front-end/backend`** | Express + **Prisma** app under `backend/` in the front-end repo — what **`DPAL_UPSTREAM_URL`** should point at for queues/detail alignment. |
 
-**Already implemented**
+**Already implemented (high level)**
 
-- **Login screen:** open **`/login`** on the front-end app (e.g. local dev: `http://localhost:3000/login` with Vite’s configured port). Users sign in with **email or username** + password (`pages/auth/LoginPage.tsx`).
-- **Registration:** **`/signup`** creates accounts; new users are stored in MongoDB (pending verification unless bootstrapped as admin — see below).
-- **Database:** User **display name** and identifiers are stored in the **`users`** collection (Mongoose model **`User`**): **`fullName`** (required), **`username`**, **`email`**, plus **`role`**, **`status`**, **`emailVerified`**, **`lastLoginAt`**, etc. Passwords are **`passwordHash`** (not returned by API).
-- **Seeing multiple users:** After logging in as an **admin**, **`/admin`** loads a paginated **Users** tab (`adminListUsers`) backed by **`GET /api/admin/users`** — names and roles appear there. Non-admins do not get a global user directory; they only see their own session via **`/account`** and **`/api/auth/me`**.
+- **Login / registration:** same **`dpal-front-end`** routes (**`/login`**, **`/signup`**) and **`VITE_API_BASE`** pointing at whichever backend hosts **`/api/auth/*`** for your deployment (often the **`backend`** service origin).
+- **Admin user lists / schema:** depend on how **`dpal-front-end/backend`** (and any shared auth service) is configured — see **`dpal-front-end/claude.md`** and **`dpal-front-end/backend`** docs rather than assuming Mongoose/`users` here.
 
 **Ops notes**
 
-- **`BOOTSTRAP_ADMIN_EMAIL`** (on **`dpal-ai-server`**): if set, the **first signup** whose email matches (case-insensitive) gets **`admin`**, **`active`**, and **`emailVerified: true`** without waiting for email verification — useful to create the first operator account.
-- **`JWT_SECRET`** (32+ characters) is **required in production** for access tokens; optional dev placeholder otherwise (`src/auth/tokens.ts`).
-- Front-end must call the API that implements auth: set **`VITE_API_BASE`** to your **`dpal-ai-server`** origin (same host that mounts **`auth.routes.ts`** and **`admin.users.routes.ts`**). **`MONGODB_URI`** must be set on the server or registration/login returns **`database_unavailable`**.
+- Auth secrets (**`JWT_SECRET`**, DB URLs, bootstrap admin email, etc.) are configured on the **backend** process you deploy from **`dpal-front-end/backend`**, not in this repo.
+- **`VITE_API_BASE`** on the static app must match the origin that serves your filings + **`GET /api/reports/feed`** when wiring the public DPAL shell.
 
 Front-end–specific URLs and env details are also in **`dpal-front-end/claude.md`**.
 
@@ -117,41 +114,26 @@ Main **public** DPAL shell: many “views” driven by `currentView` in `App.tsx
 
 ---
 
-## `dpal-ai-server` — main Railway API (not this repo)
+## `dpal-front-end/backend` — main DPAL API for this stack (not this repo)
 
-**Canonical source of truth:** **[LudwigHurtado/dpal-ai-server](https://github.com/LudwigHurtado/dpal-ai-server)** on GitHub. Railway deploys from that repo’s **`main`** branch.
+**Where it lives:** inside the **`dpal-front-end`** repo, folder **`backend/`** — **Prisma**, help reports, **`GET /api/reports/feed`**, report routes as implemented there, optional **`geminiProxy`** (or similar) for local/auxiliary deploy. **Reviewer Node** sets **`DPAL_UPSTREAM_URL`** to this service’s **origin** (same host the hub uses for filings and feed when aligned).
 
-**Where to work locally:** use a **single** clone at **`C:\dpal-ai-server`** (or any path), **`git pull` / `git push`** only there. Do **not** maintain a second copy under `DPAL Reviewer Node\dpal-ai-server` for real edits—that nested folder was a historical duplicate and is easy to confuse with the canonical clone. This parent repo **ignores** `dpal-ai-server/` (see root `.gitignore`).
+**Historical note:** **`dpal-ai-server`** was an older Mongo-backed service; this stack assumes **`dpal-front-end/backend`** instead.
 
-**Typical production URL:** `https://web-production-a27b.up.railway.app` (same host the front end targets with **`VITE_API_BASE`**).
+**Work locally:** clone **`dpal-front-end`**, follow **`backend`** README for install, Prisma migrate, and port. Production URL is whatever you deploy for that backend.
 
-This is the **Mongo-backed** Node/Express service (`src/index.ts`). **Do not confuse** with `dpal-front-end/backend/` (Prisma + help reports + optional `geminiProxy` for local/auxiliary deploy).
+**AI / Gemini:** When **`VITE_USE_SERVER_AI`** is set, server routes such as **`/api/ai/gemini`** are expected on **`VITE_API_BASE`** — typically the **`backend`** deploy. Implementations live under **`dpal-front-end/backend`**, not in this repo.
 
-**AI routes (important):**
-
-| Method | Path | Purpose |
-|--------|------|---------|
-| GET | `/api/ai/health` | Light check: `hasKey`, `model` — **works when GEMINI_API_KEY is set** |
-| GET | `/api/ai/status` | `{ ok, gemini }` for **server-only AI** flag — added for `VITE_USE_SERVER_AI` flow |
-| POST | `/api/ai/gemini` | Body `{ model, contents, config? }` — **@google/genai** on server (**`GEMINI_API_KEY` only on Railway**) |
-| POST | `/api/ai/ask` | Text ask; `tier: "cheap"` uses **`cheapModel()`** |
-
-**Gemini model pitfall (fixed 2026-04):** Google API **no longer serves `gemini-1.5-flash`** on v1beta (404). Defaults now use **`GEMINI_MODEL`**, optional **`GEMINI_MODEL_CHEAP`**, or fallback **`gemini-2.0-flash`**. Triage JSON parsing hardened if the model returns non-JSON.
-
-**NFT / persona images (REST):** Native image models require **`generationConfig.responseModalities: ["TEXT", "IMAGE"]`** in the request (see [Gemini image generation](https://ai.google.dev/gemini-api/docs/image-generation)). `src/services/gemini.service.ts` implements that plus a **model fallback chain**; optional **`GEMINI_IMAGE_MODEL`** overrides the first try.
-
-**Verify production:** `GET {API_BASE}/health` → `dpal-ai-server`. `GET {API_BASE}/api/ai/health` → `hasKey: true` if key is set. **`/api/ai/status`** and **`/api/ai/gemini`** require a deploy that includes those handlers; if **`/api/ai/status` returns 404**, redeploy **`dpal-ai-server`** from latest `main` or confirm Railway is connected to that repo.
-
-**Automated check (2026-04-05):** `GET /api/ai/health` on this host returned **`hasKey: true`**, **`model: gemini-3-flash-preview`**. **`GET /api/ai/status`** still returned **404** — production build likely **not** on latest `main` yet; after redeploy, expect **`{"ok":true,"gemini":true}`** when **`GEMINI_API_KEY`** is set.
+**Gemini pitfall:** deprecated or wrong model names can return **404** from Google’s API — use env-driven model selection documented in the backend.
 
 ---
 
 ## `dpal-front-end` — Gemini: browser key vs server key
 
 - **`isAiEnabled()`** (`services/geminiService.ts`): `Boolean(VITE_GEMINI_API_KEY) || (VITE_USE_SERVER_AI === "true")`.
-- **`runGeminiGenerate()`:** if browser key exists → `@google/genai` in browser; else if **`VITE_USE_SERVER_AI`** → **`POST ${VITE_API_BASE}/api/ai/gemini`**.
-- **`VITE_*`** is **public in the bundle** — to **remove** `VITE_GEMINI_API_KEY` from Vercel: set **`GEMINI_API_KEY`** on Railway, **`VITE_USE_SERVER_AI=true`** on Vercel, **`VITE_API_BASE`** = Railway URL, **redeploy both**; then remove browser key and redeploy front end.
-- **`constants.ts`:** `API_ROUTES.AI_GEMINI`, `API_ROUTES.AI_STATUS` for the proxy paths.
+- **`runGeminiGenerate()`:** if browser key exists → `@google/genai` in browser; else if **`VITE_USE_SERVER_AI`** → **`POST ${VITE_API_BASE}/api/ai/gemini`** (mount on **`dpal-front-end/backend`** when used).
+- **`VITE_*`** is **public in the bundle** — to avoid shipping a browser Gemini key, put **`GEMINI_API_KEY`** on the **backend** deploy, set **`VITE_USE_SERVER_AI=true`**, and point **`VITE_API_BASE`** at that origin.
+- **`constants.ts`:** `API_ROUTES.AI_GEMINI`, `API_ROUTES.AI_STATUS` — confirm paths against **`dpal-front-end/backend`** after route changes.
 
 **Material / UI**
 
